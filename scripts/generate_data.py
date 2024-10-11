@@ -4,21 +4,7 @@ from pathlib import Path
 import numpy as np
 from scipy.io import wavfile
 
-
-def second_to_millisecond(s: float | np.ndarray) -> float | np.ndarray:
-    return s * 1e3
-
-
-def millisecond_to_second(ms: float | np.ndarray) -> float | np.ndarray:
-    return ms / 1e3
-
-
-def ms_to_s(ms: float | np.ndarray) -> float | np.ndarray:
-    return millisecond_to_second(ms=ms)
-
-
-def s_to_ms(s: float | np.ndarray) -> float | np.ndarray:
-    return second_to_millisecond(s=s)
+from segma.utils.conversions import millisecond_to_second, second_to_millisecond
 
 
 @dataclass
@@ -38,11 +24,11 @@ class AudioAnnotation:
 
     @property
     def start_time_s(self):
-        return ms_to_s(self.start_time)
+        return millisecond_to_second(self.start_time)
 
     @property
     def duration_s(self):
-        return ms_to_s(self.duration)
+        return millisecond_to_second(self.duration)
 
     @property
     def end_time(self):
@@ -50,7 +36,7 @@ class AudioAnnotation:
 
     @property
     def end_time_s(self):
-        return ms_to_s(self.end_time)
+        return millisecond_to_second(self.end_time)
 
     def write(self, n_digits: int = 6):
         return f"{self.uid} {round(self.start_time, n_digits)} {round(self.duration, n_digits)} {self.label}"
@@ -82,8 +68,8 @@ class AudioAnnotation:
         assert len(fields) == 10 or len(fields) == 9
         cls(
             uid=fields[1],
-            start_time=s_to_ms(float(fields[3])),
-            duration=s_to_ms(float(fields[4])),
+            start_time=second_to_millisecond(float(fields[3])),
+            duration=second_to_millisecond(float(fields[4])),
             label=fields[7],
         )
 
@@ -104,9 +90,9 @@ def gen_annots(
     durations_s = rng.uniform(0.2, max_annot_duration_s, size=n)
     # get n starting points
     starting_points_s = rng.uniform(0, audio_duration_s - max_annot_duration_s, size=n)
-    # NOTE - s_to_ms
-    durations = s_to_ms(durations_s)
-    starting_points: np.ndarray = s_to_ms(starting_points_s)
+    # NOTE - second_to_millisecond
+    durations = second_to_millisecond(durations_s)
+    starting_points: np.ndarray = second_to_millisecond(starting_points_s)
 
     starting_points.sort()
     label_idxs = rng.integers(len(labels), size=n)

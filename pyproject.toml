@@ -12,6 +12,7 @@ dependencies = [
     "pytest>=8.3.3",
     "ruff>=0.6.9",
     "scipy>=1.14.1",
+    "soundfile>=0.12.1; sys_platform == 'darwin'",
     "torch>=2.4.1",
     "torchaudio>=2.4.1",
 ]
@@ -19,3 +20,6 @@ dependencies = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.mypy]
+exclude = ["scripts"]

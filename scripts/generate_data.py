@@ -175,7 +175,7 @@ def gen_classification(
     _uids = [str(i).rjust(4, "0") for i in range(3 * per_split)]
     uids = {
         split: _uids[i * per_split : (i + 1) * per_split]
-        for i, split in enumerate(("train", "test", "dev"))
+        for i, split in enumerate(("train", "val", "test"))
     }
 
     # NOTE - write uid list

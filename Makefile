@@ -6,6 +6,7 @@ base: f tc
 f format:
 	@uv run ruff check --select I --fix
 	@uv run ruff format
+	@uv run ruff check
 
 tc type-check:
 	@uv run mypy --disallow-untyped-defs .

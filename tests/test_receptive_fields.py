@@ -28,7 +28,7 @@ def test_rf_end_i() -> None:
 
 def test_rf_size() -> None:
     kernels = [3, 2]
-    paddings = [1, 0]
+    _paddings = [1, 0]
     strides = [3, 1]
 
     assert rf_size(kernels=kernels, strides=strides, L=2) == 6

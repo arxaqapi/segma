@@ -18,8 +18,8 @@ def rf_start_i(u_L: int, strides: list[int], paddings: list[int], L: int) -> int
     S_0 = prod(strides)
 
     P_0 = 0
-    for l in range(L):
-        P_0 += paddings[l] * prod(strides[:l])
+    for layer_i in range(L):
+        P_0 += paddings[layer_i] * prod(strides[:layer_i])
 
     return u_L * S_0 - P_0
 
@@ -44,8 +44,8 @@ def rf_end_i(
     S_0 = prod(strides)
 
     rt = 0
-    for l in range(L):
-        rt += (1 + paddings[l] - kernels[l]) * prod(strides[:l])
+    for layer_i in range(L):
+        rt += (1 + paddings[layer_i] - kernels[layer_i]) * prod(strides[:layer_i])
 
     return v_L * S_0 - rt
 
@@ -65,6 +65,6 @@ def rf_size(kernels: list[int], strides: list[int], L: int) -> int:
     """
 
     rf = 0
-    for l in range(L):
-        rf += (kernels[l] - 1) * prod(strides[:l])
+    for layer_i in range(L):
+        rf += (kernels[layer_i] - 1) * prod(strides[:layer_i])
     return rf + 1

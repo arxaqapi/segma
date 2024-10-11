@@ -1,0 +1,234 @@
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+from scipy.io import wavfile
+
+
+def second_to_millisecond(s: float | np.ndarray) -> float | np.ndarray:
+    return s * 1e3
+
+
+def millisecond_to_second(ms: float | np.ndarray) -> float | np.ndarray:
+    return ms / 1e3
+
+
+def ms_to_s(ms: float | np.ndarray) -> float | np.ndarray:
+    return millisecond_to_second(ms=ms)
+
+
+def s_to_ms(s: float | np.ndarray) -> float | np.ndarray:
+    return second_to_millisecond(s=s)
+
+
+@dataclass
+class AudioAnnotation:
+    uid: str
+    start_time: float
+    """start_time in milliseconds"""
+    duration: float
+    """duration in milliseconds"""
+    label: str
+    """associated segment label"""
+
+    @classmethod
+    def read_line(cls, line: str):
+        uid, start_time, duration, label = line.strip().split(" ")
+        return cls(uid, float(start_time), float(duration), label)
+
+    @property
+    def start_time_s(self):
+        return ms_to_s(self.start_time)
+
+    @property
+    def duration_s(self):
+        return ms_to_s(self.duration)
+
+    @property
+    def end_time(self):
+        return self.start_time + self.duration
+
+    @property
+    def end_time_s(self):
+        return ms_to_s(self.end_time)
+
+    def write(self, n_digits: int = 6):
+        return f"{self.uid} {round(self.start_time, n_digits)} {round(self.duration, n_digits)} {self.label}"
+
+    def __str__(self) -> str:
+        return f"Annot for '{self.uid}': from {round(self.start_time_s, 6)} s to {round(self.start_time_s + self.duration_s, 6)} | seg duration: {round(self.duration_s, 4)} | labl: {self.label}"
+
+    def __repr__(self) -> str:
+        return self.write()
+
+    def to_rttm(self) -> str:
+        return " ".join(
+            [
+                "SPEAKER",
+                self.uid,
+                # "1",
+                "<NA>",
+                f"{round(self.start_time_s, 6)}",
+                f"{round(self.duration_s, 6)}",
+                "<NA> <NA>",
+                self.label,
+                "<NA> <NA>",
+            ]
+        )
+
+    @classmethod
+    def from_rttm(cls, line: str):
+        fields = line.strip().split(" ")
+        assert len(fields) == 10 or len(fields) == 9
+        cls(
+            uid=fields[1],
+            start_time=s_to_ms(float(fields[3])),
+            duration=s_to_ms(float(fields[4])),
+            label=fields[7],
+        )
+
+
+def gen_annots(
+    uid: str,
+    audio_duration_s: float = 60.0,
+    labels: list[str] = ["male", "female", "key_child", "other_child"],
+    max_annot_duration_s: int = 3,
+    min_annot_count: int = 4,
+    max_annot_count: int = 10,
+) -> list[AudioAnnotation]:
+    rng = np.random.default_rng()
+
+    # get n between 4 to 10
+    n = np.random.randint(min_annot_count, max_annot_count)
+    # get n random duration
+    durations_s = rng.uniform(0.2, max_annot_duration_s, size=n)
+    # get n starting points
+    starting_points_s = rng.uniform(0, audio_duration_s - max_annot_duration_s, size=n)
+    # NOTE - s_to_ms
+    durations = s_to_ms(durations_s)
+    starting_points: np.ndarray = s_to_ms(starting_points_s)
+
+    starting_points.sort()
+    label_idxs = rng.integers(len(labels), size=n)
+
+    annotations = [
+        AudioAnnotation(uid=uid, start_time=s, duration=duration, label=labels[label_i])
+        for s, duration, label_i in zip(starting_points, durations, label_idxs)
+    ]
+    return annotations
+
+
+def gen_audio_from_annot(
+    annotations: list[AudioAnnotation],
+    label_to_freq: dict[str, int],
+    audio_duration_s: float = 60.0,
+    sample_rate: int = 16_000,
+):
+    # TODO - normalize audio
+    n_samples = int(audio_duration_s * sample_rate)
+    array = np.zeros((1, n_samples), dtype=np.float32)
+    for annot in annotations:
+        start_time_f = int(annot.start_time_s * sample_rate)
+        duration_f = int(annot.duration_s * sample_rate)
+
+        freq_segment = gen_sine(
+            f=label_to_freq[annot.label], duration_s=annot.duration_s
+        )
+
+        array[:, start_time_f : start_time_f + duration_f] = freq_segment
+    return array
+
+
+def gen_sine(f: int = 440, duration_s: float = 1.0, sr: int = 16_000):
+    t = np.linspace(0, duration_s, int(sr * duration_s), endpoint=False)
+    sine_wave = np.sin(2 * np.pi * f * t)
+    return sine_wave
+
+
+def _plot_spectro(waveform, fig_title: str = "audio.png", sr: int = 16_000):
+    import matplotlib.pyplot as plt
+    import scipy as sp
+
+    f, t, zz = sp.signal.stft(waveform, fs=sr)
+
+    fig, ax = plt.subplots(dpi=150)
+    # spectro are optional, remove expensive gouraud
+    pcm = ax.pcolormesh(t, f, np.abs(zz))  # , shading="gouraud")
+
+    ax.set_ylim(top=4000)
+
+    plt.title("Spectrogram")
+    plt.ylabel("Frequency [Hz]")
+    plt.xlabel("Time [sec]")
+    plt.colorbar(pcm, label="Magnitude")
+    plt.savefig(fig_title)
+    plt.close(fig)
+
+
+def gen_classification(
+    output: Path = Path("data"),
+    audio_duration_s: float = 60.0,
+    labels: list[str] = ["male", "female", "key_child", "other_child"],
+    per_split: int = 5,
+):
+    wav_out = output / "wav"
+    wav_out.mkdir(parents=True, exist_ok=True)
+
+    annotations_out = output / "annotations"
+    annotations_out.mkdir(parents=True, exist_ok=True)
+
+    rttms_out = output / "rttm"
+    rttms_out.mkdir(parents=True, exist_ok=True)
+
+    uems_out = output / "uem"
+    uems_out.mkdir(parents=True, exist_ok=True)
+
+    spectro_out = output / "spectrograms"
+    spectro_out.mkdir(parents=True, exist_ok=True)
+    # NOTE - 1. generate uid list
+    _uids = [str(i).rjust(4, "0") for i in range(3 * per_split)]
+    uids = {
+        split: _uids[i * per_split : (i + 1) * per_split]
+        for i, split in enumerate(("train", "test", "dev"))
+    }
+
+    # NOTE - write uid list
+    for split, s_uids in uids.items():
+        with (output / f"{split}.txt").open("w") as f:
+            for uid in s_uids:
+                f.write(uid + "\n")
+
+    label_to_freq = {label: 440 * i for i, label in enumerate(labels, start=1)}
+
+    for split, s_uids in uids.items():
+        for uid in s_uids:
+            # NOTE - gen annotations
+            annots = gen_annots(
+                uid,
+                audio_duration_s=audio_duration_s,
+                labels=labels,
+                # min_annot_count=15,
+                # max_annot_count=25,
+            )
+            # NOTE - map annotations to frequency and generate audio
+            # (channels, samples)
+            audio = gen_audio_from_annot(
+                annots, label_to_freq, audio_duration_s=audio_duration_s
+            )
+            _plot_spectro(audio[0], fig_title=str(spectro_out / f"{uid}_spectro.png"))
+
+            # NOTE - write wav file and annotations (.aa, .rttm, .uem)
+            wavfile.write((wav_out / uid).with_suffix(".wav"), 16_000, audio.T)
+
+            with (annotations_out / f"{uid}.aa").open("w") as f:
+                f.writelines([a.write() + "\n" for a in annots])
+
+            with (rttms_out / f"{uid}.rttm").open("w") as f:
+                f.writelines([a.to_rttm() + "\n" for a in annots])
+            # corresponding UEM > fixed audio duration
+            with (uems_out / f"{uid}.uem").open("w") as f:
+                f.write(f"{uid} NA 0.000 {audio_duration_s}")
+
+
+if __name__ == "__main__":
+    gen_classification(output=Path("data/debug"), per_split=20)

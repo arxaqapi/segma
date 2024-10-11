@@ -1,3 +1,6 @@
+# segma specific files and folders
+data/
+
 # Python-generated files
 __pycache__/
 *.py[oc]

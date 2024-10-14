@@ -45,6 +45,21 @@ class MultiLabelEncoder:
                 f"input argument {label=} has incorrect type '{type(label)}', used str or list[str] as argument."
             )
 
+    def inv_one_hot(self, one_hot: np.ndarray) -> tuple[str, ...]:
+        """maps a one_hot vector to its corresponding labels"""
+        if not len(one_hot.shape) == 1:
+            raise NotImplementedError(
+                "Only a single one-hot vector is supported at the moment for the inverse transform function."
+            )
+        if not one_hot.shape[-1] == len(self):
+            raise ValueError(
+                f"The input one-hot vector has size {one_hot.shape[-1]} wich is different than the expected '{len(self)}' encoded labels."
+            )
+
+        return tuple([label for label, i in self.map.items() if one_hot[i] == 1])
+
+    one_hot_to_label = inv_one_hot
+
     def __call__(self, label: str) -> int:
         return self.transform(label)
 

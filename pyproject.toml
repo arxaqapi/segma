@@ -7,10 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "lightning>=2.4.0",
     "matplotlib>=3.9.2",
-    "mypy>=1.11.2",
     "numpy>=2.1.2",
-    "pytest>=8.3.3",
-    "ruff>=0.6.9",
     "scipy>=1.14.1",
     "soundfile>=0.12.1; sys_platform == 'darwin'",
     "torch>=2.4.1",
@@ -20,6 +17,13 @@ dependencies = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.3.3",
+    "ruff>=0.6.9",
+    "mypy>=1.11.2",
+]
 
 [tool.mypy]
 exclude = ["scripts"]

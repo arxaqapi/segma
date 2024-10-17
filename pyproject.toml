@@ -13,6 +13,7 @@ dependencies = [
     "soundfile>=0.12.1; sys_platform == 'darwin'",
     "torch>=2.4.1",
     "torchaudio>=2.4.1",
+    "wandb>=0.18.3",
 ]
 
 [build-system]
@@ -24,6 +25,7 @@ dev-dependencies = [
     "pytest>=8.3.3",
     "ruff>=0.6.9",
     "mypy>=1.11.2",
+    "notebook>=7.2.2",
 ]
 
 [tool.mypy]

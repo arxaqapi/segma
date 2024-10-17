@@ -19,4 +19,4 @@ c clean:
 	rm -rf .pytest_cache
 	rm -rf .ruff_cache
 	find src -name "__pycache__" -type d -exec rm -rf {} +
-
+	rm -rf lightning_logs checkpoints wandb

@@ -1,5 +1,7 @@
 # segma specific files and folders
 data/
+logs/
+wandb/
 
 # extra
 .vscode

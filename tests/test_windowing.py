@@ -30,5 +30,4 @@ def test_windows_to_target():
     assert int(targets[4][0]) == 1
     assert int(targets[5][0]) == 1
 
-
     # test that for frames with no overlap (no class), the default class is returned

@@ -5,7 +5,7 @@ import torch
 import torchaudio
 
 from segma.annotation import AudioAnnotation
-from segma.models.miniseg import BaseSegmentationModel, Whisperidou
+from segma.models import BaseSegmentationModel, Whisperidou
 from segma.structs.interval import Interval, Intervals
 from segma.utils.conversions import frames_to_milliseconds
 from segma.utils.receptive_fields import rf_end_i, rf_start_i

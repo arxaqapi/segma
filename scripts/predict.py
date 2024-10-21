@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from segma.models.miniseg import Minisinc, Whisperidou
+from segma.models import Minisinc, Whisperidou
 from segma.predict import prediction
 from segma.utils.encoders import PowersetMultiLabelEncoder
 

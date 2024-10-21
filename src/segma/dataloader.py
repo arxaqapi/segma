@@ -18,7 +18,7 @@ from segma.utils.encoders import LabelEncoder
 from segma.utils.receptive_fields import rf_center_i, rf_end_i, rf_size, rf_start_i
 
 from .annotation import AudioAnnotation
-from .models.miniseg import ConvolutionSettings
+from .models import ConvolutionSettings
 from .utils.conversions import (
     frames_to_seconds,
     milliseconds_to_frames,

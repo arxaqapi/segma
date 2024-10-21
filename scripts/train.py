@@ -6,7 +6,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 
 from segma.dataloader import Config, SegmentationDataLoader
-from segma.models.miniseg import Minisinc, Whisperidou
+from segma.models import Minisinc, Whisperidou
 from segma.utils.encoders import PowersetMultiLabelEncoder
 
 if __name__ == "__main__":

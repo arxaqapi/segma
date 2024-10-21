@@ -21,7 +21,7 @@ class Intervals:
         intervals.sort()
 
         ret = [intervals[0]]
-        for next_i, (s, e, l) in enumerate(intervals, start=1):
+        for next_i, (s, e, label) in enumerate(intervals, start=1):
             if next_i == len(intervals):
                 ret[-1] = ret[-1][0], max(ret[-1][1], e), label
                 break

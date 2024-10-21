@@ -32,3 +32,8 @@ dev-dependencies = [
 
 [tool.mypy]
 exclude = ["scripts"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:.*sentry_sdk\\.Hub.*:DeprecationWarning",
+]

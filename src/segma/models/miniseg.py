@@ -1,12 +1,24 @@
 from dataclasses import dataclass
+from math import floor
 from typing import Any
 
 import lightning as pl
+import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
-from torchmetrics.functional.classification import f1_score, multiclass_auroc
+import wandb
+from torchmetrics.functional.classification import (
+    auroc,
+    multiclass_accuracy,
+    multiclass_auroc,
+    multiclass_f1_score,
+    multiclass_roc,
+)
+from transformers import WhisperFeatureExtractor, WhisperModel
+from transformers.modeling_outputs import BaseModelOutput
 
 from segma.utils.encoders import LabelEncoder, PowersetMultiLabelEncoder
+from segma.utils.receptive_fields import rf_center_i, rf_size
 
 
 @dataclass
@@ -14,6 +26,46 @@ class ConvolutionSettings:
     kernels: tuple[int, ...]
     strides: tuple[int, ...]
     paddings: tuple[int, ...]
+
+    def n_windows(
+        self, chunk_duration_f: int = 32_000, strict: bool = True, correct: bool = True
+    ) -> int:
+        """compute the total number of covered windows for a given audio duration
+
+        Args:
+            chunk_duration_f (int, optional): duration of the reference audio. Defaults to 32_000.
+            strict (bool, optional): if strict, the last window is fully contained, otherwise allow for overshooting. Defaults to True.
+            correct (bool, optional): add a correction term (1) to the recetpive field step computation (in the case a kernel has size even). Defaults to True.
+
+        Returns:
+            int: _description_
+        """
+        # Should be 320 (f) with duration 2 secs and whisper model
+        # Should be 270 (f) with duration 2 secs and sinc model
+        rf_step = rf_step = int(
+            rf_center_i(
+                5,
+                self.kernels,
+                self.strides,
+                self.paddings,
+            )
+            - rf_center_i(
+                4,
+                self.kernels,
+                self.strides,
+                self.paddings,
+            )
+            + (1 if correct else 0)
+        )
+
+        return (
+            (chunk_duration_f // rf_step)
+            if not strict
+            else floor(
+                (chunk_duration_f - rf_size(self.kernels, self.strides)) / rf_step
+            )
+            + 1
+        )
 
 
 class BaseSegmentationModel(pl.LightningModule):
@@ -24,6 +76,11 @@ class BaseSegmentationModel(pl.LightningModule):
                 "Only PowersetMultiLabelEncoder is accepted at the moment."
             )
         self.label_encoder = label_encoder
+
+    def audio_preparation_hook(self, audio_t):
+        """should be overwritten in the child class,
+        if audio processing is necessary before passing through the model"""
+        return audio_t
 
     def training_step(self, batch, batch_idx):
         x = batch["x"]
@@ -66,10 +123,9 @@ class BaseSegmentationModel(pl.LightningModule):
             "val/loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
         )
 
-        average_f_score = f1_score(
+        average_f_score = multiclass_f1_score(
             preds=y_pred.argmax(-1),
             target=y_target.argmax(-1),
-            task="multiclass",
             num_classes=len(self.label_encoder),
             zero_division=0,
         )
@@ -80,10 +136,9 @@ class BaseSegmentationModel(pl.LightningModule):
             prog_bar=True,
             logger=True,
         )
-        f1_score_p_class = average_f_score = f1_score(
+        f1_score_p_class = average_f_score = multiclass_f1_score(
             preds=y_pred.argmax(-1),
             target=y_target.argmax(-1),
-            task="multiclass",
             num_classes=len(self.label_encoder),
             average=None,
             zero_division=0,
@@ -111,6 +166,37 @@ class BaseSegmentationModel(pl.LightningModule):
             prog_bar=True,
             logger=True,
         )
+
+        # ROC curves plotting
+        fpr_s, tpr_s, _ = multiclass_roc(
+            preds=y_pred,
+            target=y_target.argmax(-1),
+            num_classes=len(self.label_encoder),
+        )
+
+        roc_fig = plt.figure(figsize=(10, 5))
+        roc_ax = roc_fig.add_subplot()
+        for fpr, tpr, label in zip(fpr_s, tpr_s, self.label_encoder.labels):
+            roc_ax.plot(
+                fpr.cpu(),
+                tpr.cpu(),
+                label=f"{" & ".join([e[:3] for e in label]) if label != () else "None"} - AUC={{todo}}",
+            )
+        roc_ax.plot([0, 1], [0, 1], "k--", label="Random classifier: AUC=0.5")
+        roc_ax.set_xlabel("False Positive Rate (Sensitivity )")
+        roc_ax.set_ylabel("True Positive Rate")
+        roc_ax.set_title(f"ROC Curve at epoch n° {self.current_epoch}")
+
+        roc_ax.legend(
+            bbox_to_anchor=(1.04, 0.5),
+            loc="center left",
+            borderaxespad=0,
+            edgecolor="None",
+        )
+        roc_fig.tight_layout()
+
+        self.logger.experiment.log({"ROC_curves": wandb.Image(roc_fig)})
+        plt.close(roc_fig)
 
         return loss
 
@@ -176,3 +262,43 @@ class Minisinc(BaseSegmentationModel):
         x = x.transpose(2, 1)
         logits = self.classifier(x)
         return torch.nn.functional.softmax(logits, dim=-1)
+
+
+class Whisperidou(BaseSegmentationModel):
+    def __init__(
+        self, label_encoder: LabelEncoder, encoder_model: str = "openai/whisper-tiny"
+    ) -> None:
+        super().__init__(label_encoder)
+
+        self.feature_extractor = WhisperFeatureExtractor()
+
+        _w_model = WhisperModel.from_pretrained(encoder_model)
+        _w_model.freeze_encoder()
+        self.w_encoder = _w_model.get_encoder()
+        del _w_model.decoder
+
+        self.classifier = nn.Sequential(
+            nn.Linear(_w_model.config.d_model, 256),
+            nn.ReLU(),
+            nn.Linear(256, len(label_encoder.labels)),
+        )
+
+        self.conv_settings = ConvolutionSettings(
+            kernels=(400, 3, 3), strides=(160, 1, 2), paddings=(200, 1, 1)
+        )
+
+    def forward(self, x: torch.Tensor):
+        enc_x: BaseModelOutput = self.w_encoder(x)
+        logits = self.classifier(enc_x.last_hidden_state)
+
+        # Since whisper expects 30s audio segments as input (480_000 frames)
+        # we have to truncate the output to only cover 2s of audio
+        logits = logits[:, : self.conv_settings.n_windows(strict=False), :]
+
+        return torch.nn.functional.softmax(logits, dim=-1)
+
+    def audio_preparation_hook(self, audio_t):
+        # 'np': numpy | 'pt': pytorch
+        return self.feature_extractor(
+            audio_t, return_tensors="pt", sampling_rate=16_000
+        )

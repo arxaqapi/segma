@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from functools import reduce
 from math import ceil, floor
 from pathlib import Path
+from typing import Callable
 
 import lightning as pl
 import numpy as np
@@ -48,7 +49,7 @@ class Config:
     sample_rate: int = 16_000
     chunk_duration: float = 2.0
     batch_size: int = 32
-    num_workers: int = 1
+    num_workers: int = 4
     ds_path: Path = Path("data/debug")
 
 
@@ -57,11 +58,13 @@ class SegmentationDataLoader(pl.LightningDataModule):
         self,
         label_encoder: LabelEncoder,
         config: Config,
+        audio_preparation_hook: Callable | None = None,
     ) -> None:
         super().__init__()
         self.label_encoder = label_encoder
-
         self.config = config
+        self.audio_preparation_hook = audio_preparation_hook
+
         self.rng = np.random.default_rng()
 
         # NOTE - load train, val, test uris
@@ -147,11 +150,15 @@ class SegmentationDataLoader(pl.LightningDataModule):
                 annotations=self.subds_to_annotations["train"],
                 config=self.config,
                 label_encoder=self.label_encoder,
+                audio_preparation_hook=self.audio_preparation_hook,
             ),
             batch_size=self.config.batch_size,
             drop_last=True,
             num_workers=self.config.num_workers,
             persistent_workers=True,
+            multiprocessing_context="fork"
+            if torch.backends.mps.is_available()
+            else None,
         )
 
     def val_dataloader(self):
@@ -162,11 +169,15 @@ class SegmentationDataLoader(pl.LightningDataModule):
                 annotations=self.subds_to_annotations["val"],
                 config=self.config,
                 label_encoder=self.label_encoder,
+                audio_preparation_hook=self.audio_preparation_hook,
             ),
             batch_size=self.config.batch_size,
             drop_last=True,
             num_workers=self.config.num_workers,
             persistent_workers=True,
+            multiprocessing_context="fork"
+            if torch.backends.mps.is_available()
+            else None,
         )
 
 
@@ -178,6 +189,7 @@ class AudioSegmentationDataset(IterableDataset):
         annotations: list[InterLap],
         config: Config,
         label_encoder: LabelEncoder,
+        audio_preparation_hook: Callable | None = None,
     ):
         self.uris = uris
         self.durations = durations
@@ -185,9 +197,13 @@ class AudioSegmentationDataset(IterableDataset):
 
         self.config = config
         self.label_encoder = label_encoder
+        self.audio_preparation_hook = audio_preparation_hook
 
         self.windows = generate_frames(
-            config.conv_settings, config.sample_rate, config.chunk_duration
+            config.conv_settings,
+            config.sample_rate,
+            config.chunk_duration,
+            strict=False,
         )
 
         assert len(uris) == durations.shape[0]
@@ -217,6 +233,7 @@ class AudioSegmentationDataset(IterableDataset):
 
             # NOTE 3. {'x': cropped audio from [start_idx: start_idx + duration]
             #     'y': overlaping frames corresponding to the model output [[...n-labels], ...] }
+            # (32000)
             waveform = self.load_audio(
                 (self.config.ds_path / "wav" / self.uris[uri_i]).with_suffix(".wav"),
                 start_f=start_index_f,
@@ -228,6 +245,11 @@ class AudioSegmentationDataset(IterableDataset):
             y_target = windows_to_targets(
                 windows, self.label_encoder, self.annotations[uri_i]
             )
+
+            # NOTE - preparation hook
+            if self.audio_preparation_hook is not None:
+                # (1, 80, 3000)
+                waveform = self.audio_preparation_hook(waveform)["input_features"]
 
             # x: (_, waveforms), y: (_, n_windows, n_labels)
             yield {"x": waveform.squeeze(), "y": y_target}
@@ -273,37 +295,9 @@ def generate_frames(
     # should be 32_000 for 2s @ 16khz
     chunk_duration_f = int(seconds_to_frames(chunk_duration, sample_rate))
 
-    # Should be 320 (f) with duration 2 secs and whisper model
-    # Should be 270 (f) with duration 2 secs and sinc model
-    rf_step = int(
-        rf_center_i(
-            5,
-            conv_settings.kernels,
-            conv_settings.strides,
-            conv_settings.paddings,
-        )
-        - rf_center_i(
-            4,
-            conv_settings.kernels,
-            conv_settings.strides,
-            conv_settings.paddings,
-        )
-        # + 1
-        # correction term
-        # TODO - test with PyanNet architecture
-    )
-
     # if strict, each window will have the exact same size `rf_size(...)`,
     # else allow shorter frames that are then clipped
-    n_windows = (
-        (chunk_duration_f // rf_step)
-        if not strict
-        else floor(
-            (chunk_duration_f - rf_size(conv_settings.kernels, conv_settings.strides))
-            / rf_step
-        )
-        + 1
-    )
+    n_windows = conv_settings.n_windows(strict=strict, correct=True)
     wins = [
         [
             rf_start_i(i, conv_settings.strides, conv_settings.paddings),

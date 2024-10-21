@@ -19,6 +19,7 @@ class AudioAnnotation:
 
     @classmethod
     def read_line(cls, line: str) -> Self:
+        """parses a valid AudioAnnotation line as a string and outputs an AudioAnnotation instance."""
         uid, start_time, duration, label = line.strip().split(" ")
         return cls(uid, float(start_time), float(duration), label)
 
@@ -42,7 +43,7 @@ class AudioAnnotation:
         return f"{self.uid} {round(self.start_time_ms, n_digits)} {round(self.duration_ms, n_digits)} {self.label}"
 
     def __str__(self) -> str:
-        return f"Annot for '{self.uid}': from {round(self.start_time_s, 6)} s to {round(self.start_time_s + self.duration_s, 6)} | seg duration: {round(self.duration_s, 4)} | labl: {self.label}"
+        return f"Annot for '{self.uid}': from {round(self.start_time_s, 6)} s to {round(self.start_time_s + self.duration_s, 6)} | seg duration: {round(self.duration_s, 4)} | label: {self.label}"
 
     def __repr__(self) -> str:
         return self.write()
@@ -64,6 +65,7 @@ class AudioAnnotation:
 
     @classmethod
     def from_rttm(cls, line: str) -> Self:
+        """parses a valid RTTM-formatted line as a string and outputs an AudioAnnotation instance."""
         fields = line.strip().split(" ")
         assert len(fields) == 10 or len(fields) == 9
         return cls(

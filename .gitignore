@@ -3,6 +3,7 @@ data/
 logs/
 wandb/
 notebooks/
+models/
 
 # extra
 .vscode

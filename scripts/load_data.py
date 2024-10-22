@@ -146,7 +146,7 @@ def symlink_all(
         for wav_p in wavs:
             target_symlink = wav_out / wav_p.name
             if not target_symlink.exists():
-                target_symlink.symlink_to(wav_p)
+                target_symlink.absolute().symlink_to(wav_p.absolute())
 
     # NOTE - rttm copy and aa creation
     rttm_out = output_base / "rttm"

@@ -91,10 +91,11 @@ class SegmentationDataLoader(pl.LightningDataModule):
                 _subds_to_annotations[subset].append(annotations)
                 # total audio duration in number of frames sampled at self.sample_rate
                 info = torchaudio.info(
-                    uri=(config.ds_path / "wav" / uri).with_suffix(".wav")
+                    uri=(config.ds_path / "wav" / uri)
+                    .with_suffix(".wav")
+                    .readlink()
+                    .absolute()
                 )
-
-                self._validate_uri(info.sample_rate, annotations)
 
                 duration_l.append(
                     (info.num_frames, total_annotation_duration(annotations))
@@ -258,7 +259,7 @@ class AudioSegmentationDataset(IterableDataset):
         """loads only wanted segment from audio and downsamples it."""
         assert duration_f == 32_000
         audio_t, _sr = torchaudio.load(
-            audio_file_p, frame_offset=start_f, num_frames=duration_f
+            audio_file_p.resolve(), frame_offset=start_f, num_frames=duration_f
         )
         # downmix to mono
         if audio_t.shape[0] > 1:

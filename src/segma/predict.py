@@ -21,7 +21,7 @@ def prediction(
         output_p.mkdir(exist_ok=True)
     assert audio_path.exists()
 
-    audio_t, _sr = torchaudio.load(audio_path)
+    audio_t, _sr = torchaudio.load(audio_path.resolve())
     assert _sr == 16_000
 
     # downmix to mono

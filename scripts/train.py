@@ -83,10 +83,12 @@ if __name__ == "__main__":
     model_checkpoint = ModelCheckpoint(
         monitor=monitor,
         mode=mode,
-        save_top_k=5,
-        every_n_epochs=1,
+        save_top_k=-1,
+        # every_n_epochs=1,
         save_last=True,
         dirpath=chkp_path,
+        filename="epoch={epoch:02d}-val_loss={val/loss:.3f}",
+        auto_insert_metric_name=False,
     )
     early_stopping = EarlyStopping(
         monitor=monitor,

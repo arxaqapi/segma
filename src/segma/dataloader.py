@@ -39,6 +39,12 @@ def load_annotations(aa_file_p: Path) -> list[AudioAnnotation]:
     return annotations
 
 
+def filter_annotations(
+    annotations: list[AudioAnnotation], covered_labels: tuple[str, ...]
+):
+    return [annot for annot in annotations if annot.label in covered_labels]
+
+
 def total_annotation_duration(annotations: list[AudioAnnotation]) -> float:
     return reduce(lambda b, e: b + e.duration_ms, annotations, 0)
 
@@ -46,6 +52,7 @@ def total_annotation_duration(annotations: list[AudioAnnotation]) -> float:
 @dataclass(frozen=True)
 class Config:
     conv_settings: ConvolutionSettings
+    labels: tuple[str, ...]
     sample_rate: int = 16_000
     chunk_duration_s: float = 2.0
     batch_size: int = 32
@@ -82,13 +89,10 @@ class SegmentationDataLoader(pl.LightningDataModule):
         _subds_to_annotations: dict[str, list[list[AudioAnnotation]]] = defaultdict(
             list
         )
+        uris_to_remove: list[tuple[str, str]] = []
         for subset in ("train", "val", "test"):
             duration_l = []
             for uri in self.uris[subset]:
-                annotations = load_annotations(
-                    (config.ds_path / "annotations" / uri).with_suffix(".aa")
-                )
-                _subds_to_annotations[subset].append(annotations)
                 # total audio duration in number of frames sampled at self.sample_rate
                 info = torchaudio.info(
                     uri=(config.ds_path / "wav" / uri)
@@ -96,6 +100,23 @@ class SegmentationDataLoader(pl.LightningDataModule):
                     .readlink()
                     .absolute()
                 )
+                annotations = load_annotations(
+                    (config.ds_path / "aa" / uri).with_suffix(".aa")
+                )
+
+                if not self._validate_uri(
+                    num_frames=info.num_frames,
+                    sample_rate=info.sample_rate,
+                    annotations=annotations,
+                ):
+                    uris_to_remove.append((subset, uri))
+                    continue
+
+                # REVIEW - annotation are stored here and reused later, such that filtering has to happen only once.
+                annotations = filter_annotations(
+                    annotations, covered_labels=config.labels
+                )
+                _subds_to_annotations[subset].append(annotations)
 
                 duration_l.append(
                     (info.num_frames, total_annotation_duration(annotations))
@@ -103,6 +124,10 @@ class SegmentationDataLoader(pl.LightningDataModule):
 
             # NOTE - make efficient np.array
             self.subds_to_durations[subset] = np.array(duration_l, dtype=_durations_t)
+
+        # NOTE - remove all uris where the audio is shorter that the given duration
+        for subset, uri_to_remove in uris_to_remove:
+            self.uris[subset].remove(uri_to_remove)
 
         # NOTE - load all annotations as mapping from subset to list of Interlap object (that allows fast query for `y` vector construction)
         self.subds_to_annotations: dict[str, list[InterLap]] = defaultdict(list)
@@ -136,12 +161,25 @@ class SegmentationDataLoader(pl.LightningDataModule):
                     )
                 )
 
-    def _validate_uri(self, sample_rate, annotations: list[AudioAnnotation]) -> None:
-        assert sample_rate == self.config.sample_rate
+    def _validate_uri(
+        self, num_frames, sample_rate, annotations: list[AudioAnnotation]
+    ) -> bool:
+        """valide the audio file, if it is not valid
+        (sample_rate does not match, label do not match, shorter than chunk_duration_s),
+        return False
+        """
+        # TODO - handle the case when audio_duraton == chunk_duration_s -> pick index 0
+        # TODO - raise warnings
+        if frames_to_seconds(num_frames, sample_rate) <= self.config.chunk_duration_s:
+            return False
+
+        if sample_rate != self.config.sample_rate:
+            return False
+
         for annot in annotations:
-            # print(annot.label)
-            # print(self.label_encoder.labels)
-            assert annot.label in self.label_encoder
+            if annot.label not in self.label_encoder:
+                return False
+        return True
 
     def train_dataloader(self):
         return DataLoader(

@@ -18,16 +18,15 @@ if __name__ == "__main__":
     if not chkp_path.exists():
         chkp_path.mkdir()
 
-    l_encoder = PowersetMultiLabelEncoder(
-        ["male", "female", "key_child", "other_child"]
-    )
+    labels = ("KCHI", "OCH", "FEM", "MAL", "SPEECH")
+    l_encoder = PowersetMultiLabelEncoder(labels)
 
     # model = Minisinc(l_encoder)
     # model = Miniseg(l_encoder)
     model = Whisperidou(l_encoder)
     dm = SegmentationDataLoader(
         l_encoder,
-        config=Config(model.conv_settings),
+        config=Config(model.conv_settings, labels),
         audio_preparation_hook=model.audio_preparation_hook,
     )
 

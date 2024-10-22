@@ -47,7 +47,7 @@ def total_annotation_duration(annotations: list[AudioAnnotation]) -> float:
 class Config:
     conv_settings: ConvolutionSettings
     sample_rate: int = 16_000
-    chunk_duration: float = 2.0
+    chunk_duration_s: float = 2.0
     batch_size: int = 32
     num_workers: int = 4
     ds_path: Path = Path("data/debug")
@@ -203,7 +203,7 @@ class AudioSegmentationDataset(IterableDataset):
         self.windows = generate_frames(
             config.conv_settings,
             config.sample_rate,
-            config.chunk_duration,
+            config.chunk_duration_s,
             strict=False,
         )
 
@@ -286,15 +286,15 @@ class AudioSegmentationDataset(IterableDataset):
 def generate_frames(
     conv_settings: ConvolutionSettings,
     sample_rate: int,
-    chunk_duration: float = 2.0,
+    chunk_duration_s: float = 2.0,
     strict: bool = True,
 ) -> np.ndarray:
-    """Given a models receptive field settings and a `chunk_duration`,
+    """Given a models receptive field settings and a `chunk_duration_s`,
     compute the amount of possible frames to generate and generate these frames.
     (to be offsetted)
     """
     # should be 32_000 for 2s @ 16khz
-    chunk_duration_f = int(seconds_to_frames(chunk_duration, sample_rate))
+    chunk_duration_f = int(seconds_to_frames(chunk_duration_s, sample_rate))
 
     # if strict, each window will have the exact same size `rf_size(...)`,
     # else allow shorter frames that are then clipped
@@ -311,7 +311,7 @@ def generate_frames(
         ]
         for i in range(n_windows)
     ]
-    # REVIEW - add -1 to chunk_duration ??
+    # REVIEW - add -1 to chunk_duration_s ??
     wins = np.array(wins).clip(0, chunk_duration_f)
 
     return wins

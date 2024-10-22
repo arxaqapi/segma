@@ -75,12 +75,13 @@ class SegmentationDataLoader(pl.LightningDataModule):
         self.rng = np.random.default_rng()
 
         # NOTE - load train, val, test uris
+        # dict from subset to list of uris
         self.uris: dict[str, list[str]] = {
             subset: load_uris((config.ds_path / subset).with_suffix(".txt"))
             for subset in ("train", "val", "test")
         }
 
-        # NOTE for each subset, get and store audio duration and annotated duration (as number of frames)
+        # NOTE for each subset, get and store audio duration, annotated duration (as number of frames) and annotations
         _durations_t = np.dtype(
             [("audio_duration_f", np.int32), ("annotated_duration_f", np.int32)]
         )

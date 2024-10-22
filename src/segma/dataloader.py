@@ -252,7 +252,7 @@ class AudioSegmentationDataset(IterableDataset):
         # ensures each worker has a separate seed
         rng = np.random.default_rng(seed=w_info.seed)
 
-        durations_f = floor(seconds_to_frames(self.config.chunk_duration))
+        durations_f = floor(seconds_to_frames(self.config.chunk_duration_s))
         while True:
             # NOTE 1. sample a file depending on its annotated or audio duration
             # audio_duration_f, annotated_duration_f
@@ -315,7 +315,7 @@ class AudioSegmentationDataset(IterableDataset):
         # REVIEW - file error with iterable dataset len that has to be an integer
         return int(
             max(
-                ceil(total_annotated_duration_s / self.config.chunk_duration),
+                ceil(total_annotated_duration_s / self.config.chunk_duration_s),
                 self.config.batch_size,
             )
         )

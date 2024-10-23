@@ -1,6 +1,7 @@
 from collections import defaultdict
+from typing import TypeAlias
 
-type Interval = tuple[int, int, int | str]
+Interval: TypeAlias = tuple[int, int, int | str]
 
 
 class Intervals:

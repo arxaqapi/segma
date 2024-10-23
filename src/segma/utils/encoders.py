@@ -1,12 +1,34 @@
+from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from itertools import combinations
 
 import numpy as np
 
-type LabelEncoder = PowersetMultiLabelEncoder
+
+class LabelEncoder(ABC):
+    @property
+    @abstractmethod
+    def labels(self) -> tuple[tuple[str, ...], ...]:
+        pass
+
+    @abstractmethod
+    def transform(self, label) -> int:
+        pass
+
+    @abstractmethod
+    def inv_transform(self, i: int) -> tuple[str, ...]:
+        pass
+
+    @abstractmethod
+    def one_hot(self, labels: Iterable[str] | str) -> np.ndarray:
+        pass
+
+    @abstractmethod
+    def i_to_one_hot(self, i: int) -> np.ndarray:
+        pass
 
 
-class MultiLabelEncoder:
+class MultiLabelEncoder(LabelEncoder):
     """Safe mapping from labels to integer values and the corresponding one-hot vectors for multi-label problems."""
 
     def __init__(self, labels: list[str] | tuple[str, ...]) -> None:
@@ -24,7 +46,10 @@ class MultiLabelEncoder:
             )
         return self.map[label]
 
-    def one_hot(self, label: str | list[str] | tuple[str, ...]) -> np.ndarray:
+    def inv_transform(self, i: int) -> tuple[str, ...]:
+        raise NotImplementedError
+
+    def one_hot(self, labels: Iterable[str] | str) -> np.ndarray:
         """Returns the one-hot representation of the label of list of labels given as input.
 
         Args:
@@ -37,20 +62,20 @@ class MultiLabelEncoder:
             np.ndarray: numpy array of size n.
         """
         _n = len(self.map)
-        if isinstance(label, list) or isinstance(label, tuple):
+        if isinstance(labels, Iterable):
             return (
-                np.eye(_n, dtype=np.uint8)[[self.transform(lab) for lab in label]]
+                np.eye(_n, dtype=np.uint8)[[self.transform(lab) for lab in labels]]
                 .sum(axis=0)
                 .clip(0, 1)
             )
-        elif isinstance(label, str):
-            return np.eye(_n, dtype=np.uint8)[self.transform(label)]
+        elif isinstance(labels, str):
+            return np.eye(_n, dtype=np.uint8)[self.transform(labels)]
         else:
             raise ValueError(
-                f"input argument {label=} has incorrect type '{type(label)}', used str or list[str] as argument."
+                f"input argument {labels=} has incorrect type '{type(labels)}', used str or list[str] as argument."
             )
 
-    def i_to_one_hot(self, i) -> np.ndarray:
+    def i_to_one_hot(self, i: int) -> np.ndarray:
         raise NotImplementedError
 
     def inv_one_hot(self, one_hot: np.ndarray) -> tuple[str, ...]:
@@ -78,7 +103,7 @@ class MultiLabelEncoder:
         return x in self.labels
 
 
-class PowersetMultiLabelEncoder:
+class PowersetMultiLabelEncoder(LabelEncoder):
     """Safe mapping from labels to integer values and the corresponding one-hot vectors for multi-label problems.
     Automatically transforms a multi-label problem into a multi-class one."""
 

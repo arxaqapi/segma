@@ -115,7 +115,7 @@ def parse_db(complete_database: dict):
 def symlink_all(
     all_datasets: list[Dataset],
     ds_to_wav: dict[str, list[Path]],
-    output_base: Path = Path("data/debug/"),
+    output_base: Path = Path("data/baby_train/"),
 ):
     # create the following folder structure:
     # data/

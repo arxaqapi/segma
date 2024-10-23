@@ -10,7 +10,7 @@ from lightning.pytorch.callbacks import (
     LearningRateMonitor,
     ModelCheckpoint,
 )
-from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
@@ -60,6 +60,9 @@ if __name__ == "__main__":
         flush=True,
     )
 
+    reference_time = datetime.fromtimestamp(time.time()).strftime("%Y%m%d_%H%M%S")
+    save_path = Path("models")
+
     if args.log:
         logger = WandbLogger(
             project="Segma debug",
@@ -67,17 +70,14 @@ if __name__ == "__main__":
             log_model="all",
             tags=[],
         )
+        save_path = save_path / f"{reference_time}--{logger.experiment.id}"
+        save_path.mkdir(parents=True, exist_ok=True)
+    else:
+        save_path = save_path / f"{reference_time}"
+        save_path.mkdir(parents=True, exist_ok=True)
+        logger = CSVLogger(save_dir=save_path)
 
-    reference_time = datetime.fromtimestamp(time.time()).strftime("%Y%m%d_%H%M%S")
-    chkp_path = (
-        Path("models")
-        / (
-            f"{reference_time}--{logger.experiment.id}"
-            if args.log
-            else f"{reference_time}"
-        )
-        / "checkpoints"
-    )
+    chkp_path = save_path / "checkpoints"
     chkp_path.mkdir(parents=True, exist_ok=True)
 
     model_checkpoint = ModelCheckpoint(
@@ -101,7 +101,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         max_epochs=60,
-        logger=None if not args.log else logger,
+        logger=logger,
         callbacks=[model_checkpoint, early_stopping, LearningRateMonitor()],
     )
 

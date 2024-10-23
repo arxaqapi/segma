@@ -1,4 +1,4 @@
-.PHONY: base f format tc type-check t test c clean
+.PHONY: base f format tc type-check t test c clean z zip uz unzip
 
 
 base: f tc
@@ -14,9 +14,16 @@ tc type-check:
 t test:
 	@uv run pytest -s
 
+z zip:
+	tar -czf segma.tar.gz -X .gitignore *
+
+uz unzip:
+	tar -xzf segma.tar.gz -C segma
+
 c clean:
 	rm -rf .mypy_cache
 	rm -rf .pytest_cache
 	rm -rf .ruff_cache
 	find src -name "__pycache__" -type d -exec rm -rf {} +
 	rm -rf lightning_logs checkpoints wandb
+	rm -rf segma.tar.gz

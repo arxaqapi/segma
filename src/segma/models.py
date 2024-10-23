@@ -14,8 +14,9 @@ from torchmetrics.functional.classification import (
     multiclass_f1_score,
     multiclass_roc,
 )
-from transformers import WhisperFeatureExtractor, WhisperModel
+from transformers import WhisperFeatureExtractor
 from transformers.modeling_outputs import BaseModelOutput
+from transformers.models.whisper.modeling_whisper import WhisperEncoder
 
 from segma.utils.encoders import LabelEncoder, PowersetMultiLabelEncoder
 from segma.utils.receptive_fields import rf_center_i, rf_size
@@ -272,13 +273,13 @@ class Whisperidou(BaseSegmentationModel):
 
         self.feature_extractor = WhisperFeatureExtractor()
 
-        _w_model = WhisperModel.from_pretrained(encoder_model)
-        _w_model.freeze_encoder()
-        self.w_encoder = _w_model.get_encoder()
-        del _w_model.decoder
+        self.w_encoder = WhisperEncoder.from_pretrained(
+            "whisper_tiny_encoder", local_files_only=True
+        )
+        self.w_encoder._freeze_parameters()
 
         self.classifier = nn.Sequential(
-            nn.Linear(_w_model.config.d_model, 256),
+            nn.Linear(self.w_encoder.config.d_model, 256),
             nn.ReLU(),
             nn.Linear(256, len(label_encoder.labels)),
         )

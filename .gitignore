@@ -4,6 +4,7 @@ logs/
 wandb/
 notebooks/
 models/
+whisper_tiny_encoder/
 
 # extra
 .vscode

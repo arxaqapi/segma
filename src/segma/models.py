@@ -200,8 +200,6 @@ class BaseSegmentationModel(pl.LightningModule):
         self.logger.experiment.log({"ROC_curves": wandb.Image(roc_fig)})
         plt.close(roc_fig)
 
-        return loss
-
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=1e-3)
 

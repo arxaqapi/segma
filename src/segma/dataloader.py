@@ -15,7 +15,7 @@ from interlap import InterLap
 from torch.utils.data import DataLoader, IterableDataset
 
 from segma.utils.encoders import LabelEncoder
-from segma.utils.receptive_fields import rf_center_i, rf_end_i, rf_size, rf_start_i
+from segma.utils.receptive_fields import rf_end_i, rf_start_i
 
 from .annotation import AudioAnnotation
 from .models import ConvolutionSettings

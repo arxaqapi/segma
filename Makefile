@@ -24,6 +24,7 @@ c clean:
 	rm -rf .mypy_cache
 	rm -rf .pytest_cache
 	rm -rf .ruff_cache
+	rm -rf __pycache__
 	find src -name "__pycache__" -type d -exec rm -rf {} +
 	rm -rf lightning_logs checkpoints wandb
 	rm -rf segma.tar.gz

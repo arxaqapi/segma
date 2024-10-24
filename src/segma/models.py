@@ -178,10 +178,11 @@ class BaseSegmentationModel(pl.LightningModule):
         roc_fig = plt.figure(figsize=(10, 5))
         roc_ax = roc_fig.add_subplot()
         for fpr, tpr, label in zip(fpr_s, tpr_s, self.label_encoder.labels):
+            labels_str = " & ".join([e[:3] for e in label]) if label != () else "None"
             roc_ax.plot(
                 fpr.cpu(),
                 tpr.cpu(),
-                label=f"{" & ".join([e[:3] for e in label]) if label != () else "None"} - AUC={{todo}}",
+                label=f"{labels_str} - AUC={{todo}}",
             )
         roc_ax.plot([0, 1], [0, 1], "k--", label="Random classifier: AUC=0.5")
         roc_ax.set_xlabel("False Positive Rate (Sensitivity )")

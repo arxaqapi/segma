@@ -197,7 +197,10 @@ class BaseSegmentationModel(pl.LightningModule):
         )
         roc_fig.tight_layout()
 
-        self.logger.experiment.log({"ROC_curves": wandb.Image(roc_fig)})
+        try:
+            self.logger.experiment.log({"ROC_curves": wandb.Image(roc_fig)})
+        except Exception as _:
+            pass
         plt.close(roc_fig)
 
     def configure_optimizers(self):
@@ -357,3 +360,12 @@ class WhisperiMax(BaseSegmentationModel):
         return self.feature_extractor(
             audio_t, return_tensors="pt", sampling_rate=16_000
         )
+
+
+# improve with str.lowercase
+Models = {
+    "Whisperidou": Whisperidou,
+    "whisperidou": Whisperidou,
+    "WhisperiMax": WhisperiMax,
+    "whisperimax": WhisperiMax,
+}

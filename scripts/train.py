@@ -10,17 +10,56 @@ from lightning.pytorch.callbacks import (
     LearningRateMonitor,
     ModelCheckpoint,
 )
-from lightning.pytorch.loggers import CSVLogger, WandbLogger
+from lightning.pytorch.loggers import CSVLogger
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from segma.dataloader import Config, SegmentationDataLoader
-from segma.models import Minisinc, Whisperidou
+from segma.models import Models, Whisperidou, WhisperiMax
 from segma.utils.encoders import PowersetMultiLabelEncoder
+
+
+def get_metric(metric: str) -> tuple[str, str]:
+    if args.metric == "loss":
+        return "min", "val/loss"
+    elif args.metric == "auroc":
+        return "max", "val/auroc"
+    elif args.metric == "fscore":
+        return "max", "val/f1_score"
+    else:
+        raise ValueError(
+            f"metric '{metric}' is not supported, please use 'loss', 'auroc' or 'fscore'."
+        )
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-l", "--log", default=False)
+    parser.add_argument(
+        "--wandb", action="store_true", help="Use Wandb or not (default is set to no)."
+    )
+    parser.add_argument(
+        "--metric",
+        type=str,
+        choices=["loss", "auroc", "fscore"],
+        required=True,
+        default="auroc",
+        help="Evaluation metric to use (loss, auroc, fscore)",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        choices=["whisperidou", "whisperimax"],  # , "pyannet"],
+        required=True,
+        default="whisperimax",
+        help="Model to use (whisperidou, whisperimax)",  # , fscore)",
+    )
+    parser.add_argument(
+        "--tags",
+        type=list[str],
+        default=[],
+        help="Tags to be added to the wandb logging instance.",
+    )
+
     args = parser.parse_args()
 
     chkp_path = Path("models")
@@ -30,11 +69,9 @@ if __name__ == "__main__":
     labels = ("KCHI", "OCH", "FEM", "MAL", "SPEECH")
     l_encoder = PowersetMultiLabelEncoder(labels)
 
-    # model = Minisinc(l_encoder)
-    # model = Miniseg(l_encoder)
-    model = Whisperidou(l_encoder)
-    mode = "min"
-    monitor = "val/loss"
+    model: Whisperidou | WhisperiMax = Models[args.model](l_encoder)
+
+    mode, monitor = get_metric(args.metric)
 
     def configure_optimizers(self):
         optim = AdamW(self.parameters(), lr=1e-3)
@@ -63,19 +100,36 @@ if __name__ == "__main__":
     reference_time = datetime.fromtimestamp(time.time()).strftime("%Y%m%d_%H%M%S")
     save_path = Path("models")
 
-    if args.log:
-        logger = WandbLogger(
-            project="Segma debug",
-            name="oberon_train",
-            log_model="all",
-            tags=[],
-        )
-        save_path = save_path / f"{reference_time}--{logger.experiment.id}"
-        save_path.mkdir(parents=True, exist_ok=True)
-    else:
+    if not args.wandb:
+        print("[log] - use CSVLogger")
+
         save_path = save_path / f"{reference_time}"
         save_path.mkdir(parents=True, exist_ok=True)
         logger = CSVLogger(save_dir=save_path)
+    else:
+        print("[log] - use WandbLogger")
+        from lightning.pytorch.loggers import WandbLogger
+
+        try:
+            logger = WandbLogger(
+                project="Segma debug",
+                name="oberon_train",
+                log_model="all",
+                tags=args.tags,
+            )
+            save_path = save_path / f"{reference_time}--{logger.experiment.id}"
+        except Exception as _:
+            import wandb
+
+            wandb.init(mode="disabled")
+            logger = WandbLogger(
+                project="Segma debug",
+                name="oberon_train",
+                log_model="all",
+                tags=args.tags,
+            )
+            save_path = save_path / f"{reference_time}--{logger.experiment.id}"
+        save_path.mkdir(parents=True, exist_ok=True)
 
     chkp_path = save_path / "checkpoints"
     chkp_path.mkdir(parents=True, exist_ok=True)

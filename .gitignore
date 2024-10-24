@@ -5,6 +5,7 @@ wandb/
 notebooks/
 models/
 whisper_tiny_encoder/
+*.tar.gz
 
 # extra
 .vscode

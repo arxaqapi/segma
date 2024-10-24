@@ -56,7 +56,7 @@ class Config:
     sample_rate: int = 16_000
     chunk_duration_s: float = 2.0
     batch_size: int = 32
-    num_workers: int = 4
+    num_workers: int = 8
     ds_path: Path = Path("data/baby_train")
 
 

@@ -8,7 +8,7 @@ def test_Intervals_init():
 def test_Intervals_add():
     intervals = Intervals()
 
-    l = [
+    dummy_interval_list = [
         (0, 10, "a"),
         (0, 10, "b"),
         (20, 30, "a"),
@@ -18,7 +18,7 @@ def test_Intervals_add():
         (40, 50, "c"),
     ]
 
-    for interval in l:
+    for interval in dummy_interval_list:
         intervals.add(interval)
 
     # Intervals([(0, 10, 'a'), (0, 10, 'b'), (20, 30, 'c'), (20, 35, 'a'), (40, 73, 'c')])

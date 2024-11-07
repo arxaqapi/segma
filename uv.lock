@@ -156,6 +156,20 @@ wheels = [
 ]
 
 [[package]]
+name = "asteroid-filterbanks"
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "torch" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/90/fa/5c2be1f96dc179f83cdd3bb267edbd1f47d08f756785c016d5c2163901a7/asteroid-filterbanks-0.4.0.tar.gz", hash = "sha256:415f89d1dcf2b13b35f03f7a9370968ac4e6fa6800633c522dac992b283409b9", size = 24599 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c5/7c/83ff6046176a675e6a1e8aeefed8892cd97fe7c46af93cc540d1b24b8323/asteroid_filterbanks-0.4.0-py3-none-any.whl", hash = "sha256:4932ac8b6acc6e08fb87cbe8ece84215b5a74eee284fe83acf3540a72a02eaf5", size = 29912 },
+]
+
+[[package]]
 name = "asttokens"
 version = "2.4.1"
 source = { registry = "https://pypi.org/simple" }
@@ -731,7 +745,7 @@ dependencies = [
     { name = "pygments" },
     { name = "stack-data" },
     { name = "traitlets" },
-    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.12' and python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f7/21/48db7d9dd622b9692575004c7c98f85f5629428f58596c59606d36c51b58/ipython-8.28.0.tar.gz", hash = "sha256:0d0d15ca1e01faeb868ef56bc7ee5a0de5bd66885735682e8a322ae289a13d1a", size = 5495762 }
 wheels = [
@@ -2225,6 +2239,7 @@ name = "segma"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "asteroid-filterbanks" },
     { name = "interlap" },
     { name = "lightning" },
     { name = "matplotlib" },
@@ -2248,6 +2263,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "asteroid-filterbanks", specifier = ">=0.4.0" },
     { name = "interlap", specifier = ">=0.2.7" },
     { name = "lightning", specifier = ">=2.4.0" },
     { name = "matplotlib", specifier = ">=3.9.2" },
@@ -2364,7 +2380,7 @@ name = "soundfile"
 version = "0.12.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi" },
+    { name = "cffi", marker = "sys_platform != 'linux'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/6f/96/5ff33900998bad58d5381fd1acfcdac11cbea4f08fc72ac1dc25ffb13f6a/soundfile-0.12.1.tar.gz", hash = "sha256:e8e1017b2cf1dda767aef19d2fd9ee5ebe07e050d430f77a0a7c66ba08b8cdae", size = 43184 }
 wheels = [
@@ -2490,7 +2506,7 @@ dependencies = [
     { name = "nvidia-nccl-cu12", marker = "platform_machine == 'x86_64' and platform_system == 'Linux'" },
     { name = "nvidia-nvtx-cu12", marker = "platform_machine == 'x86_64' and platform_system == 'Linux'" },
     { name = "sympy" },
-    { name = "triton", marker = "python_full_version < '3.13' and platform_machine == 'x86_64' and platform_system == 'Linux'" },
+    { name = "triton", marker = "python_full_version < '3.13' and platform_machine == 'x86_64' and platform_system == 'Linux' and python_full_version >= '3.11'" },
     { name = "typing-extensions" },
 ]
 wheels = [
@@ -2654,7 +2670,7 @@ dependencies = [
     { name = "docker-pycreds" },
     { name = "gitpython" },
     { name = "platformdirs" },
-    { name = "protobuf" },
+    { name = "protobuf", marker = "python_full_version >= '3.11'" },
     { name = "psutil" },
     { name = "pyyaml" },
     { name = "requests" },

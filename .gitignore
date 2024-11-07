@@ -3,7 +3,7 @@ data/
 logs/
 wandb/
 notebooks/
-models/
+/models/
 whisper_tiny_encoder/
 *.tar.gz
 

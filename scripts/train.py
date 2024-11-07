@@ -5,6 +5,7 @@ from pathlib import Path
 from types import MethodType
 
 import lightning as pl
+import torch
 from lightning.pytorch.callbacks import (
     EarlyStopping,
     LearningRateMonitor,
@@ -154,10 +155,13 @@ if __name__ == "__main__":
     )
 
     trainer = pl.Trainer(
+        devices="gpu",
         max_epochs=60,
         logger=logger,
         callbacks=[model_checkpoint, early_stopping, LearningRateMonitor()],
     )
+
+    model = torch.compile(model)
 
     print(f"[log @ {datetime.now().strftime('%Y%m%d_%H%M')}] - started training")
     trainer.fit(model, datamodule=dm)

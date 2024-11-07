@@ -42,7 +42,6 @@ if __name__ == "__main__":
         "--metric",
         type=str,
         choices=["loss", "auroc", "fscore"],
-        required=True,
         default="auroc",
         help="Evaluation metric to use (loss, auroc, fscore)",
     )
@@ -50,7 +49,6 @@ if __name__ == "__main__":
         "--model",
         type=str,
         choices=["whisperidou", "whisperimax"],  # , "pyannet"],
-        required=True,
         default="whisperimax",
         help="Model to use (whisperidou, whisperimax)",  # , fscore)",
     )

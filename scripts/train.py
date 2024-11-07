@@ -65,7 +65,7 @@ if __name__ == "__main__":
     if not chkp_path.exists():
         chkp_path.mkdir()
 
-    labels = ("KCHI", "OCH", "FEM", "MAL", "SPEECH")
+    labels = ("KCHI", "OCH", "FEM", "MAL") # , "SPEECH")
     l_encoder = PowersetMultiLabelEncoder(labels)
 
     model: Whisperidou | WhisperiMax = Models[args.model](l_encoder)

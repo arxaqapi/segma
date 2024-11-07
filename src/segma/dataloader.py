@@ -14,16 +14,15 @@ import torchaudio
 from interlap import InterLap
 from torch.utils.data import DataLoader, IterableDataset
 
-from segma.utils.encoders import LabelEncoder
-from segma.utils.receptive_fields import rf_end_i, rf_start_i
-
-from .annotation import AudioAnnotation
-from .models import ConvolutionSettings
-from .utils.conversions import (
+from segma.annotation import AudioAnnotation
+from segma.models.base import ConvolutionSettings
+from segma.utils.conversions import (
     frames_to_seconds,
     milliseconds_to_frames,
     seconds_to_frames,
 )
+from segma.utils.encoders import LabelEncoder
+from segma.utils.receptive_fields import rf_end_i, rf_start_i
 
 
 def load_uris(file_p: Path) -> list[str]:

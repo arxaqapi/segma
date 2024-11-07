@@ -4,9 +4,8 @@ import torch
 import torch.nn as nn
 from asteroid_filterbanks import Encoder, ParamSincFB
 
+from segma.models.base import BaseSegmentationModel, ConvolutionSettings
 from segma.utils.encoders import LabelEncoder  # PowersetMultiLabelEncoder
-
-from ..models import BaseSegmentationModel, ConvolutionSettings
 
 
 class SincNet(nn.Module):

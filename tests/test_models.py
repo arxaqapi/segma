@@ -1,7 +1,6 @@
 import torch
 
-from segma.imports import PyanNet
-from segma.models import Whisperidou, WhisperiMax
+from segma.models import PyanNet, Whisperidou, WhisperiMax
 from segma.utils.encoders import PowersetMultiLabelEncoder
 
 

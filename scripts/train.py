@@ -16,7 +16,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from segma.dataloader import Config, SegmentationDataLoader
-from segma.models import Models, Whisperidou, WhisperiMax
+from segma.models import Models, PyanNet, Whisperidou, WhisperiMax
 from segma.utils.encoders import PowersetMultiLabelEncoder
 
 
@@ -48,13 +48,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model",
         type=str,
-        choices=["whisperidou", "whisperimax"],  # , "pyannet"],
+        choices=["whisperidou", "whisperimax", "pyannet"],
         default="whisperimax",
         help="Model to use (whisperidou, whisperimax)",  # , fscore)",
     )
     parser.add_argument(
         "--tags",
-        type=list[str],
+        nargs="*",
         default=[],
         help="Tags to be added to the wandb logging instance.",
     )
@@ -65,10 +65,10 @@ if __name__ == "__main__":
     if not chkp_path.exists():
         chkp_path.mkdir()
 
-    labels = ("KCHI", "OCH", "FEM", "MAL") # , "SPEECH")
+    labels = ("KCHI", "OCH", "FEM", "MAL")  # , "SPEECH")
     l_encoder = PowersetMultiLabelEncoder(labels)
 
-    model: Whisperidou | WhisperiMax = Models[args.model](l_encoder)
+    model: Whisperidou | WhisperiMax | PyanNet = Models[args.model](l_encoder)
 
     mode, monitor = get_metric(args.metric)
 

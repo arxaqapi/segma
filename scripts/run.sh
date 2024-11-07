@@ -12,4 +12,4 @@
 source .venv/bin/activate
 module load audio-tools
 
-python scripts/train.py --log True
+srun python scripts/train.py --wandb --tags no_speech

@@ -94,12 +94,8 @@ class SegmentationDataLoader(pl.LightningDataModule):
             duration_l = []
             for uri in self.uris[subset]:
                 # total audio duration in number of frames sampled at self.sample_rate
-                info = torchaudio.info(
-                    uri=(config.ds_path / "wav" / uri)
-                    .with_suffix(".wav")
-                    .readlink()
-                    .absolute()
-                )
+                uri_path = (config.ds_path / "wav" / uri).with_suffix(".wav").resolve()
+                info = torchaudio.info(uri=uri_path)
                 annotations = load_annotations(
                     (config.ds_path / "aa" / uri).with_suffix(".aa")
                 )

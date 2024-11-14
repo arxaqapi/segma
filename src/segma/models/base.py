@@ -5,8 +5,6 @@ from math import floor
 import lightning as pl
 import matplotlib.pyplot as plt
 import torch
-import torch.nn as nn
-import wandb
 from torchmetrics.functional.classification import (
     # auroc,
     # multiclass_accuracy,
@@ -15,6 +13,7 @@ from torchmetrics.functional.classification import (
     multiclass_roc,
 )
 
+import wandb
 from segma.utils.encoders import LabelEncoder, PowersetMultiLabelEncoder
 from segma.utils.receptive_fields import rf_center_i, rf_size
 

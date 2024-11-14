@@ -125,6 +125,13 @@ class SegmentationDataLoader(pl.LightningDataModule):
         for subset, uri_to_remove in uris_to_remove:
             self.uris[subset].remove(uri_to_remove)
 
+        # NOTE - check that the adjustet subset size is > 0
+        for subset, uris in self.uris.items():
+            if len(uris) == 0:
+                raise ValueError(
+                    f"subset '{subset}' is empty after removing all audio instances with duration < {self.config.chunk_duration_s} s and all audios/segments with invalid labels."
+                )
+
         # NOTE - load all annotations as mapping from subset to list of Interlap object (that allows fast query for `y` vector construction)
         self.subds_to_annotations: dict[str, list[InterLap]] = defaultdict(list)
         for subset in ("train", "val", "test"):

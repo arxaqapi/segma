@@ -88,19 +88,6 @@ class BaseSegmentationModel(pl.LightningModule):
         y_target = y_target.view(-1, len(self.label_encoder.labels))
         y_pred = y_pred.view(-1, len(self.label_encoder.labels))
 
-        ############
-        # print("===========================")
-        # print("> y_targets...")
-        # for l in y_target[5:15].tolist():
-        #     print([int(e) for e in l])
-        # print("> y_predictions...")
-        # # for i in y_pred[5:15].argmax(dim=-1):
-        # #       print(self.label_encoder.i_to_one_hot(int(i.item())))
-        # for i in y_pred[5:15]:
-        #     print(i)
-        # print("===========================")
-        ############
-
         loss = torch.nn.functional.cross_entropy(input=y_pred, target=y_target)
         self.log(
             "train/loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
@@ -201,30 +188,3 @@ class BaseSegmentationModel(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=1e-3)
-
-
-class Miniseg(BaseSegmentationModel):
-    def __init__(self, label_encoder: LabelEncoder) -> None:
-        super().__init__(label_encoder)
-
-        self.head = nn.Conv1d(1, 80, kernel_size=400, stride=160, padding=200)
-        self.net = nn.Sequential(
-            nn.GELU(),
-            nn.Conv1d(80, 512, kernel_size=3, padding=1),
-            nn.GELU(),
-            nn.Conv1d(512, 512, kernel_size=3, stride=2, padding=1),
-            nn.GELU(),
-        )
-        self.classifier = nn.Linear(512, len(label_encoder.labels))
-
-        self.conv_settings = ConvolutionSettings(
-            kernels=(400, 3, 3), strides=(160, 1, 2), paddings=(200, 1, 1)
-        )
-
-    def forward(self, x) -> torch.Tensor:
-        x = x[:, None, :]
-        x = self.head(x)[..., :-1]
-        x = self.net(x)
-        x = x.transpose(2, 1)
-        logits = self.classifier(x)
-        return torch.nn.functional.softmax(logits, dim=-1)

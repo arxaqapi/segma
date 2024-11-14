@@ -8,6 +8,33 @@ from segma.models.base import BaseSegmentationModel, ConvolutionSettings
 from segma.utils.encoders import LabelEncoder
 
 
+class Miniseg(BaseSegmentationModel):
+    def __init__(self, label_encoder: LabelEncoder) -> None:
+        super().__init__(label_encoder)
+
+        self.head = nn.Conv1d(1, 80, kernel_size=400, stride=160, padding=200)
+        self.net = nn.Sequential(
+            nn.GELU(),
+            nn.Conv1d(80, 512, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.Conv1d(512, 512, kernel_size=3, stride=2, padding=1),
+            nn.GELU(),
+        )
+        self.classifier = nn.Linear(512, len(label_encoder.labels))
+
+        self.conv_settings = ConvolutionSettings(
+            kernels=(400, 3, 3), strides=(160, 1, 2), paddings=(200, 1, 1)
+        )
+
+    def forward(self, x) -> torch.Tensor:
+        x = x[:, None, :]
+        x = self.head(x)[..., :-1]
+        x = self.net(x)
+        x = x.transpose(2, 1)
+        logits = self.classifier(x)
+        return torch.nn.functional.softmax(logits, dim=-1)
+
+
 class Minisinc(BaseSegmentationModel):
     def __init__(self, label_encoder: LabelEncoder) -> None:
         super().__init__(label_encoder)

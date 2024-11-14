@@ -43,20 +43,27 @@ if __name__ == "__main__":
         type=str,
         choices=["loss", "auroc", "fscore"],
         default="auroc",
-        help="Evaluation metric to use (loss, auroc, fscore)",
+        help="Evaluation metric to use.",
     )
     parser.add_argument(
         "--model",
         type=str,
         choices=["whisperidou", "whisperimax", "pyannet"],
         default="whisperimax",
-        help="Model to use (whisperidou, whisperimax)",  # , fscore)",
+        help="Model to use",
     )
     parser.add_argument(
         "--tags",
         nargs="*",
         default=[],
         help="Tags to be added to the wandb logging instance.",
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        choices=["debug", "baby_train"],
+        default="debug",
+        help="Dataset to use.",
     )
 
     args = parser.parse_args()
@@ -88,7 +95,9 @@ if __name__ == "__main__":
     )
     dm = SegmentationDataLoader(
         l_encoder,
-        config=Config(model.conv_settings, labels),
+        config=Config(
+            model.conv_settings, labels, ds_path=Path(f"data/{args.dataset}")
+        ),
         audio_preparation_hook=model.audio_preparation_hook,
     )
     print(

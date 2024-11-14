@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from functools import reduce
 from math import floor
 
 import lightning as pl
@@ -24,19 +25,19 @@ class ConvolutionSettings:
     strides: tuple[int, ...]
     paddings: tuple[int, ...]
 
-    def n_windows(
-        self, chunk_duration_f: int = 32_000, strict: bool = True, correct: bool = True
-    ) -> int:
+    def n_windows(self, chunk_duration_f: int = 32_000, strict: bool = True) -> int:
         """compute the total number of covered windows for a given audio duration
 
         Args:
             chunk_duration_f (int, optional): duration of the reference audio. Defaults to 32_000.
             strict (bool, optional): if strict, the last window is fully contained, otherwise allow for overshooting. Defaults to True.
-            correct (bool, optional): add a correction term (1) to the recetpive field step computation (in the case a kernel has size even). Defaults to True.
 
         Returns:
             int: _description_
         """
+        # add a correction term (1) to the receptive field step computation (in the case a kernel has an even size).
+        correct = reduce(lambda b, e: b or (e % 2 == 0), self.kernels, False)
+
         # Should be 320 (f) with duration 2 secs and whisper model
         # Should be 270 (f) with duration 2 secs and sinc model
         rf_step = rf_step = int(

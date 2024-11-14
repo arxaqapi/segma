@@ -330,7 +330,7 @@ def generate_frames(
 
     # if strict, each window will have the exact same size `rf_size(...)`,
     # else allow shorter frames that are then clipped
-    n_windows = conv_settings.n_windows(strict=strict, correct=True)
+    n_windows = conv_settings.n_windows(strict=strict)
     wins = [
         [
             rf_start_i(i, conv_settings.strides, conv_settings.paddings),

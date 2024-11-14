@@ -55,7 +55,7 @@ def test_PyanNet_forward():
     label_encoder = PowersetMultiLabelEncoder(labels)
     model = PyanNet(label_encoder)
 
-    x = torch.ones((1, 1, 32_000))
+    x = torch.ones((1, 32_000))
     out = model(x)
     # print(out.shape)
 
@@ -65,5 +65,10 @@ def test_PyanNet_forward():
     assert (1, 115, 8) == (
         1,
         model.conv_settings.n_windows(),
+        len(label_encoder.labels),
+    )
+    assert (1, 118, 8) == (
+        1,
+        model.conv_settings.n_windows(strict=False),
         len(label_encoder.labels),
     )

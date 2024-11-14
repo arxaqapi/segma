@@ -168,7 +168,8 @@ class PyanNet(BaseSegmentationModel):
         -------
         scores : (batch, frame, classes)
         """
-
+        # adjust dimensions
+        waveforms = waveforms[:, None, :]
         outputs = self.sincnet(waveforms)
 
         outputs, _ = self.lstm(

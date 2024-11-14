@@ -281,10 +281,8 @@ class AudioSegmentationDataset(IterableDataset):
                 windows, self.label_encoder, self.annotations[uri_i]
             )
 
-            # NOTE - preparation hook
-            if self.audio_preparation_hook is not None:
-                # (1, 80, 3000)
-                waveform = self.audio_preparation_hook(waveform)["input_features"]
+            # NOTE - preparation hook > (1, 80, 3000)
+            waveform = self.audio_preparation_hook(waveform)
 
             # x: (_, waveforms), y: (_, n_windows, n_labels)
             yield {"x": waveform.squeeze(), "y": y_target}

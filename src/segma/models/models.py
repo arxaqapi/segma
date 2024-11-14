@@ -78,7 +78,7 @@ class Whisperidou(BaseSegmentationModel):
         # 'np': numpy | 'pt': pytorch
         return self.feature_extractor(
             audio_t, return_tensors="pt", sampling_rate=16_000
-        )
+        )["input_features"]
 
 
 class WhisperiMax(BaseSegmentationModel):
@@ -133,4 +133,4 @@ class WhisperiMax(BaseSegmentationModel):
         # 'np': numpy | 'pt': pytorch
         return self.feature_extractor(
             audio_t, return_tensors="pt", sampling_rate=16_000
-        )
+        )["input_features"]

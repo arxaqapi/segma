@@ -1,6 +1,7 @@
 from collections import defaultdict
-from typing import TypeAlias
+from typing import Iterator, TypeAlias
 
+# TODO - fix type hints (support floats)
 Interval: TypeAlias = tuple[int, int, int | str]
 
 
@@ -48,7 +49,7 @@ class Intervals:
     def __repr__(self):
         return "%s(%r)" % (self.__class__.__name__, self.intervals)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Interval]:
         return iter(self.intervals)
 
     def __len__(self):

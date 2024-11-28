@@ -38,6 +38,7 @@ def test_PowersetMultiLabelEncoder_inv_transform():
 
     with pytest.raises(ValueError):
         enc.inv_transform(10)
+        enc.inv_transform(-10)
 
 
 def test_PowersetMultiLabelEncoder_one_hot():

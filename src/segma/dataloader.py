@@ -60,6 +60,10 @@ class Config:
 
 
 class SegmentationDataLoader(pl.LightningDataModule):
+    """The `SegmentationDataLoader` class prepares the dataset by loading all usefull metadata
+    and creating all intervals objects used later on in the AudioSegmentationDataset class.
+    """
+
     def __init__(
         self,
         label_encoder: LabelEncoder,
@@ -224,6 +228,10 @@ class SegmentationDataLoader(pl.LightningDataModule):
 
 
 class AudioSegmentationDataset(IterableDataset):
+    """`AudioSegmentationDataset` is an `IterableDataset` that produces __len__ segments
+    of a given duration.
+    """
+
     def __init__(
         self,
         uris: list[str],

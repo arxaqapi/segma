@@ -174,10 +174,15 @@ if __name__ == "__main__":
     print(f"[log @ {datetime.now().strftime('%Y%m%d_%H%M')}] - started training")
     trainer.fit(model, datamodule=dm)
 
-    # NOTE - symlink to best model
+    # NOTE - symlink to best model and to static best model (models/last/best.ckpt)
     (chkp_path / "best.ckpt").symlink_to(
         Path(model_checkpoint.best_model_path).absolute()
     )
+    static_p = Path("models/last")
+    static_p.mkdir(parents=True, exist_ok=True)
+    bm_static_p = static_p / "best.ckpt"
+    bm_static_p.unlink(missing_ok=True)
+    bm_static_p.symlink_to(Path(model_checkpoint.best_model_path).absolute())
 
     print(f"[log] - best model score: {model_checkpoint.best_model_score}")
     print(f"[log] - best model path: {model_checkpoint.best_model_path}")

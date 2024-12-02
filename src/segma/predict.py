@@ -11,13 +11,15 @@ from segma.utils.conversions import frames_to_milliseconds
 from segma.utils.receptive_fields import rf_end_i, rf_start_i
 
 
-def prediction(
-    audio_path: Path, model: BaseSegmentationModel, output_p: Path = Path("segma_out")
-):
-    """takes a path to an audio file and a trained model,
-    perform frame-level inference and stitch everything together.
+def prediction(audio_path: Path, model: BaseSegmentationModel, output_p: Path):
+    """Takes a path to an audio file, a trained model and output folder,
+    perform frame-level inference, stitches everything together
+    and saves `.aa`and `.rttm` files to the output folder and their corresponding subfolders.
 
-    Saves everything to an output file
+    Args:
+        audio_path (Path): Path to a collection of `.wav` files.
+        model (BaseSegmentationModel): Trained model used to perform inference.
+        output_p (Path): Output folder that will contain the segmentation files.
     """
     assert audio_path.exists()
 
@@ -48,8 +50,9 @@ def prediction(
     batch_t = model.audio_preparation_hook(batch_t.cpu().numpy())
 
     # (batch, windows, n_labels)
-    output = model(batch_t)
-    print(f"{output.shape=}")
+    model.eval()
+    with torch.no_grad():
+        output = model(batch_t)
 
     print(model.label_encoder.rev_map)
     all_intervals = Intervals()

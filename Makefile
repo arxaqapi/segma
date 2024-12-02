@@ -29,3 +29,10 @@ c clean:
 	rm -rf lightning_logs checkpoints wandb
 	rm -rf *.tar.gz
 	rm -rf .DS_STORE
+
+
+# Slurm
+# module load uv; source env
+# uv run scripts/train.py --model pyannet --dataset debug
+it:
+	srun --export=ALL --mem=60G --time=5:00:00 --partition=gpu --gres=gpu:1 --job-name=VTC_IT --pty bash

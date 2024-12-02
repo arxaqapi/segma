@@ -2,6 +2,7 @@
 # pass everything trough pyannote.metrics
 # output overall stats
 from collections import ChainMap
+from functools import reduce
 from pathlib import Path
 
 from pyannote.audio.utils.metric import MacroAverageFMeasure
@@ -12,8 +13,16 @@ from pyannote.database.util import load_rttm
 from segma.utils.encoders import LabelEncoder, PowersetMultiLabelEncoder
 
 
-def get_model_output_as_annotations(output_path: Path):
-    """return a dict that maps uri to corresponding RTTM"""
+def get_model_output_as_annotations(output_path: Path) -> dict[str, Annotation]:
+    """Load the output of a model (collectioin of `.rttm` files) as `pyannote.core.Annotation` objects
+    and returns a dict that maps uri to the corresponding RTTMs.
+
+    Args:
+        output_path (Path): Path to the folder containing the model outputs.
+
+    Returns:
+        dict[str, Annotation]: mapping from uris to Annotations.
+    """
     annotations: list[dict[str, Annotation]] = [
         load_rttm(f) for f in output_path.glob("*.rttm")
     ]
@@ -22,8 +31,23 @@ def get_model_output_as_annotations(output_path: Path):
 
 
 def eval_model_output(
-    rttm_true_p: Path, rttm_pred_p: Path, label_encoder: LabelEncoder
+    rttm_true_p: Path,
+    rttm_pred_p: Path,
+    label_encoder: LabelEncoder,
+    scores_output: Path = Path("fscore.csv"),
 ):
+    """Evaluates the performance of a model using the `MacroAverageFMeasure`from the `pyannote.metrics`
+    package.
+
+    This function needs the mode to have ran on the data to evaluate with the `predict(...)` function.
+
+    Args:
+        rttm_true_p (Path): A Path to a list of ground truth `.rttm` files.
+        rttm_pred_p (Path): A Path to a list of predicted `.rttm` files
+        label_encoder (LabelEncoder): The label encoder used during training, to be able to retrieve the labels used.
+        scores_output (Path, optional): Output Path of the csv file containg the scores. Defaults to Path("fscore.csv").
+    """
+
     assert rttm_true_p.exists()
     assert rttm_pred_p.exists()
     metric = MacroAverageFMeasure(classes=list(label_encoder.base_labels))
@@ -35,6 +59,8 @@ def eval_model_output(
 
     # TODO - base yourself on true uris and simulate empty annotations (or create empty files)
     for uri in supported_uris:
+        print(f"[log] - evaluating file: '{uri}'")
+
         metric(
             reference=uri_to_rttm_true[uri],
             hypothesis=uri_to_rttm_preds[uri],
@@ -42,18 +68,26 @@ def eval_model_output(
         )
 
     try:
-        metric.report(display=True).to_csv("fscore.csv")
+        metric.report(display=True).to_csv(str(scores_output))
+        # NOTE - make a symbolic link to it in the static folder
+        static_score_p = Path("models/last/fscore.csv")
+        static_score_p.mkdir(parents=True, exist_ok=True)
+        static_score_p.unlink(missing_ok=True)
+        static_score_p.symlink_to(scores_output)
     except BaseException as e:
-        print(f"[log] - Got error runing `metric.report`: {e}")
+        print(f"[log] - Got error running `metric.report`: {e}")
 
-    final_res = {}
+    # NOTE - Manual logging of metrics
+    final_res = {"Total": abs(metric)}
     for label, sub_metric in metric._sub_metrics.items():
         final_res[label] = abs(sub_metric)
 
-    print("==========================")
-    print("[log] - Results")
-    print(f"{abs(metric)=}")
-    print("==========================")
+    print("=====================")
+    print("[log] - Results\n")
+    max_len = reduce(max, [len(label) for label in final_res.keys()]) + 1
+    for k, fscore in final_res.items():
+        print(f"{k:<{max_len}}: {round(fscore, 5)}")
+    print("=====================")
 
 
 if __name__ == "__main__":

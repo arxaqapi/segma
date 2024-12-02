@@ -102,6 +102,12 @@ class BaseSegmentationModel(pl.LightningModule):
         y_target = y_target.view(-1, len(self.label_encoder.labels))
         y_pred = y_pred.view(-1, len(self.label_encoder.labels))
 
+        # NOTE - check shape sizes
+        if y_target.shape != y_pred.shape:
+            raise ValueError(
+                f"y_target and y_predict shapes do not match, got shapes: {y_target.shape=} {y_pred.shape=}"
+            )
+
         loss = torch.nn.functional.cross_entropy(input=y_pred, target=y_target)
         self.log(
             "val/loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True

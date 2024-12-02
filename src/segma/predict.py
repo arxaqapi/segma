@@ -54,7 +54,6 @@ def prediction(audio_path: Path, model: BaseSegmentationModel, output_p: Path):
     with torch.no_grad():
         output = model(batch_t)
 
-    print(model.label_encoder.rev_map)
     all_intervals = Intervals()
     for batch_i, batch in enumerate(output):
         # batch: (windows, n_labels)

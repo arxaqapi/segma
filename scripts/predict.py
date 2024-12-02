@@ -12,8 +12,8 @@ if __name__ == "__main__":
         ["male", "female", "key_child", "other_child"]
     )
 
-    # TODO - argparser to load a folder of wav
     parser = argparse.ArgumentParser()
+    parser.add_argument("--uris", help="list of uris to use for prediction")
     parser.add_argument("--wavs", default="data/debug/wav")
     parser.add_argument(
         "--ckpt",
@@ -37,10 +37,8 @@ if __name__ == "__main__":
     # if path is model/last/best -> resolve symlink
     if args.output is None and str(args.ckpt) == "models/last/best.ckpt":
         args.output = Path("/".join(args.ckpt.resolve().parts[-4:-2]))
-        print(args.output)
     else:
         args.output = Path("segma_out")
-    exit(55)
 
     # model = PyanNet.load_from_checkpoint(
     model = Whisperidou.load_from_checkpoint(
@@ -49,6 +47,15 @@ if __name__ == "__main__":
 
     model.to(torch.device("mps"))
 
-    for wav_f in args.wavs.glob("*.wav"):
-        print(f"[log] - running inference for file: '{wav_f.stem}'")
-        prediction(wav_f, model=model, output_p=args.output)
+    # NOTE if args.uris: path is known
+    if args.uris:
+        with Path(args.uris).open("r") as uri_f:
+            uris = [uri.strip() for uri in uri_f.readlines()]
+        for uri in uris:
+            wav_f = (args.wavs / uri).with_suffix(".wav")
+            print(f"[log] - running inference for file: '{wav_f.stem}'")
+            prediction(wav_f, model=model, output_p=args.output)
+    else:
+        for wav_f in args.wavs.glob("*.wav"):
+            print(f"[log] - running inference for file: '{wav_f.stem}'")
+            prediction(wav_f, model=model, output_p=args.output)

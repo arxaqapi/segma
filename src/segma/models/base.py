@@ -113,6 +113,27 @@ class BaseSegmentationModel(pl.LightningModule):
             "val/loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
         )
 
+        # NOTE - split loss for the first n elements
+        n_single = len(
+            list(filter(lambda e: e < 2, map(len, self.label_encoder.labels)))
+        )
+
+        # create a weight vector of size len(self.label_encoder) and put the first n elements to 1.
+        weights = torch.zeros(size=(len(self.label_encoder),)).to(self.device)
+        weights[:n_single] = 1.0
+        with torch.no_grad():
+            partial_loss = torch.nn.functional.cross_entropy(
+                input=y_pred, target=y_target, weight=weights
+            )
+        self.log(
+            "val/partial_loss",
+            partial_loss,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+
         average_f_score = multiclass_f1_score(
             preds=y_pred.argmax(-1),
             target=y_target.argmax(-1),

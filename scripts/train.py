@@ -72,7 +72,15 @@ if __name__ == "__main__":
     if not chkp_path.exists():
         chkp_path.mkdir()
 
-    labels = ("KCHI", "OCH", "FEM", "MAL")  # , "SPEECH")
+    if args.dataset == "baby_train":
+        labels = ("KCHI", "OCH", "FEM", "MAL")
+    elif args.dataset == "debug":
+        labels = (
+            "male",
+            "female",
+            "key_child",
+            "other_child",
+        )
     l_encoder = PowersetMultiLabelEncoder(labels)
 
     model: Whisperidou | WhisperiMax | PyanNet = Models[args.model](l_encoder)

@@ -71,7 +71,7 @@ def eval_model_output(
         metric.report(display=True).to_csv(str(scores_output))
         # NOTE - make a symbolic link to it in the static folder
         static_score_p = Path("models/last/fscore.csv")
-        static_score_p.mkdir(parents=True, exist_ok=True)
+        static_score_p.parent.mkdir(parents=True, exist_ok=True)
         static_score_p.unlink(missing_ok=True)
         static_score_p.symlink_to(scores_output)
     except BaseException as e:

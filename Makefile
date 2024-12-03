@@ -1,4 +1,4 @@
-.PHONY: base f format tc type-check t test c clean z zip uz unzip
+.PHONY: base f format tc type-check t test debug z zip uz unzip c clean it
 
 
 base: f tc
@@ -13,6 +13,9 @@ tc type-check:
 
 t test:
 	@uv run pytest -s
+
+debug:
+	@uv run scripts/train.py --dataset debug
 
 z zip:
 	tar -czf segma.tar.gz -X .gitignore *

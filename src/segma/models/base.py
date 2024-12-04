@@ -165,14 +165,15 @@ class BaseSegmentationModel(pl.LightningModule):
                 logger=True,
             )
 
-        avg_auroc = multiclass_auroc(
+        auroc_per_class = multiclass_auroc(
             preds=y_pred,
             target=y_target.argmax(-1),
             num_classes=len(self.label_encoder),
+            average="none",
         )
         self.log(
             "val/auroc",
-            avg_auroc,
+            auroc_per_class.mean(),
             on_epoch=True,
             prog_bar=True,
             logger=True,
@@ -192,7 +193,7 @@ class BaseSegmentationModel(pl.LightningModule):
             roc_ax.plot(
                 fpr.cpu(),
                 tpr.cpu(),
-                label=f"{labels_str} - AUC={{todo}}",
+                label=f"{labels_str} - AUC={round(float(auroc_per_class[ self.label_encoder.transform(label) ]), 4)}",
             )
         roc_ax.plot([0, 1], [0, 1], "k--", label="Random classifier: AUC=0.5")
         roc_ax.set_xlabel("False Positive Rate (Sensitivity )")

@@ -147,7 +147,7 @@ class BaseSegmentationModel(pl.LightningModule):
             prog_bar=True,
             logger=True,
         )
-        f1_score_p_class = average_f_score = multiclass_f1_score(
+        f1_score_p_class = multiclass_f1_score(
             preds=y_pred.argmax(-1),
             target=y_target.argmax(-1),
             num_classes=len(self.label_encoder),

@@ -37,8 +37,11 @@ if __name__ == "__main__":
     # if path is model/last/best -> resolve symlink
     if args.output is None and str(args.ckpt) == "models/last/best.ckpt":
         args.output = Path("/".join(args.ckpt.resolve().parts[-4:-2]))
-    else:
-        args.output = Path("segma_out")
+    elif args.output is None:
+        try:
+            args.output = Path("/".join(args.ckpt.parts[-4:-2]))
+        except:
+            args.output = Path("segma_out")
 
     # model = PyanNet.load_from_checkpoint(
     model = Whisperidou.load_from_checkpoint(

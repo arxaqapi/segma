@@ -101,11 +101,10 @@ if __name__ == "__main__":
         f"[log @ {datetime.now().strftime('%Y%m%d_%H:%M:%S')}] - SegmentationDataLoader initializing ...",
         flush=True,
     )
+    config = Config(model.conv_settings, labels, ds_path=Path(f"data/{args.dataset}"))
     dm = SegmentationDataLoader(
         l_encoder,
-        config=Config(
-            model.conv_settings, labels, ds_path=Path(f"data/{args.dataset}")
-        ),
+        config=config,
         audio_preparation_hook=model.audio_preparation_hook,
     )
     print(
@@ -133,6 +132,10 @@ if __name__ == "__main__":
                 log_model="all",
                 tags=args.tags,
             )
+            logger.experiment.config["batch_size"] = config.batch_size
+            logger.experiment.config["num_workers"] = config.num_workers
+            logger.experiment.config["chunk_duration_s"] = config.chunk_duration_s
+
             save_path = save_path / f"{reference_time}--{logger.experiment.id}"
         except Exception as _:
             import wandb
@@ -144,6 +147,10 @@ if __name__ == "__main__":
                 log_model="all",
                 tags=args.tags,
             )
+            logger.experiment.config["batch_size"] = config.batch_size
+            logger.experiment.config["num_workers"] = config.num_workers
+            logger.experiment.config["chunk_duration_s"] = config.chunk_duration_s
+
             save_path = save_path / f"{reference_time}--{logger.experiment.id}"
         save_path.mkdir(parents=True, exist_ok=True)
 

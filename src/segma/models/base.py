@@ -134,25 +134,27 @@ class BaseSegmentationModel(pl.LightningModule):
             logger=True,
         )
 
-        average_f_score = multiclass_f1_score(
-            preds=y_pred.argmax(-1),
-            target=y_target.argmax(-1),
-            num_classes=len(self.label_encoder),
-            zero_division=0,
-        )
-        self.log(
-            "val/f1_score",
-            average_f_score,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-        )
         f1_score_p_class = multiclass_f1_score(
             preds=y_pred.argmax(-1),
             target=y_target.argmax(-1),
             num_classes=len(self.label_encoder),
             average=None,
             zero_division=0,
+        )
+        # macro average
+        self.log(
+            "val/f1_score",
+            f1_score_p_class.mean(),
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+        self.log(
+            "val/partial_f1_score",
+            f1_score_p_class[:n_single].mean(),
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
         )
         for i, c_f1_score in enumerate(f1_score_p_class):
             c_f1_score = round(c_f1_score.item(), 6)
@@ -174,6 +176,13 @@ class BaseSegmentationModel(pl.LightningModule):
         self.log(
             "val/auroc",
             auroc_per_class.mean(),
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+        self.log(
+            "val/partial_auroc",
+            auroc_per_class[:n_single].mean(),
             on_epoch=True,
             prog_bar=True,
             logger=True,

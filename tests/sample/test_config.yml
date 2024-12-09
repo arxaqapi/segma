@@ -1,0 +1,34 @@
+wandb:
+  log: True
+  project: debug
+  name: train
+
+data:
+  dataset_path: data/baby_train
+  classes: 
+    - KCHI
+    - OCH
+    - MAL
+    - FEM
+    # - SPEECH
+
+# necessary info for pred/eval
+audio_config:
+  chunk_duration_s: 2.0
+  sample_rate: 16_000
+  strict_frames: true
+
+train:
+  model: whisperidou
+  lr: 0.001
+  batch_size: 32
+  max_epochs: 100
+  validation_metric: auroc
+  # simple or advanced (python <= 3.11)
+  profiler: null
+
+  dataloader:
+    num_workers: 8
+
+  scheduler:
+    patience: 3

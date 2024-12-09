@@ -1,4 +1,4 @@
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import asdict, dataclass, fields, is_dataclass
 from pathlib import Path
 from typing import Any, Type, TypeVar, Union, get_type_hints
 
@@ -55,6 +55,9 @@ class Config:
     data: DataConfig
     audio_config: AudioConfig
     train: TrainConfig
+
+    def as_dict(self):
+        return asdict(self)
 
 
 T = TypeVar("T")

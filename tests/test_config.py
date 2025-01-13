@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from segma.config import load_config
@@ -68,8 +70,11 @@ def test_Config_save_load():
     cfg = load_config(
         config_path="tests/sample/test_config_whisperidou.yml",
     )
-    cfg.save("tests/_temp.yml")
+    temp_p = Path("tests/_temp.yml")
+    cfg.save(temp_p)
 
     cfg_saved = load_config("tests/_temp.yml")
 
     assert cfg.as_dict() == cfg_saved.as_dict()
+
+    temp_p.unlink()

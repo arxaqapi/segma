@@ -1,4 +1,4 @@
-.PHONY: base f format tc type-check t test debug z zip uz unzip c clean it
+.PHONY: base f format tc type-check t test debug profile z zip uz unzip c clean it
 
 
 base: f tc
@@ -15,7 +15,11 @@ t test:
 	@uv run pytest -s
 
 debug:
-	@uv run scripts/train.py --dataset debug
+	sh scripts/debug.sh
+
+profile:
+	rm -rf profile.json profile
+	@uv run scalene --profile-all --gpu --outfile profile --html --json scripts/train.py --dataset debug 
 
 z zip:
 	tar -czf segma.tar.gz -X .gitignore *

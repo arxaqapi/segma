@@ -48,8 +48,11 @@ def eval_model_output(
         scores_output (Path, optional): Output Path of the csv file containg the scores. Defaults to Path("fscore.csv").
     """
 
-    assert rttm_true_p.exists()
-    assert rttm_pred_p.exists()
+    if not rttm_true_p.exists():
+        raise FileNotFoundError(f"Path '{rttm_true_p=}' not found")
+    if not rttm_pred_p.exists():
+        raise FileNotFoundError(f"Path '{rttm_pred_p=}' not found")
+
     metric = MacroAverageFMeasure(classes=list(label_encoder.base_labels))
 
     uri_to_rttm_true = get_model_output_as_annotations(rttm_true_p)

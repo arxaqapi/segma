@@ -62,3 +62,14 @@ def test_Config_as_dict():
 
     assert d is not None
     assert initial_d == d
+
+
+def test_Config_save_load():
+    cfg = load_config(
+        config_path="tests/sample/test_config_whisperidou.yml",
+    )
+    cfg.save("tests/_temp.yml")
+
+    cfg_saved = load_config("tests/_temp.yml")
+
+    assert cfg.as_dict() == cfg_saved.as_dict()

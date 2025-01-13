@@ -10,6 +10,7 @@ from pyannote.core import Annotation
 from pyannote.database.util import load_rttm
 
 # from segma.annotation import AudioAnnotation
+from segma.config import load_config
 from segma.utils.encoders import LabelEncoder, PowersetMultiLabelEncoder
 
 
@@ -74,9 +75,10 @@ def eval_model_output(
         metric.report(display=True).to_csv(str(scores_output))
         # NOTE - make a symbolic link to it in the static folder
         static_score_p = Path("models/last/fscore.csv")
-        static_score_p.parent.mkdir(parents=True, exist_ok=True)
-        static_score_p.unlink(missing_ok=True)
-        static_score_p.symlink_to(scores_output)
+        if not scores_output.absolute() == static_score_p.absolute():
+            static_score_p.parent.mkdir(parents=True, exist_ok=True)
+            static_score_p.unlink(missing_ok=True)
+            static_score_p.symlink_to(scores_output.absolute())
     except BaseException as e:
         print(f"[log] - Got error running `metric.report`: {e}")
 
@@ -99,22 +101,22 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--gt", default="data/debug/rttm")
     parser.add_argument("--pred", default="segma_out/rttm")
+    parser.add_argument(
+        "-c",
+        "--config",
+        type=str,
+        default="src/segma/config/default.yml",
+        help="Config file to be loaded and used for the training.",
+    )
 
     args = parser.parse_args()
-
     args.gt = Path(args.gt) if not isinstance(args.gt, Path) else args.gt
     args.pred = Path(args.pred) if not isinstance(args.pred, Path) else args.pred
+    cfg = load_config(args.config)
 
-    # TODO - fixme - use config
     eval_model_output(
         rttm_true_p=args.gt,
         rttm_pred_p=args.pred,
-        label_encoder=PowersetMultiLabelEncoder(
-            labels=[
-                "male",
-                "female",
-                "key_child",
-                "other_child",
-            ]
-        ),
+        label_encoder=PowersetMultiLabelEncoder(labels=cfg.data.classes),
+        scores_output=args.pred.parent / "fscore.csv",
     )

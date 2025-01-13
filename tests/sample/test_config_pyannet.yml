@@ -1,7 +1,6 @@
-
 wandb:
   log: True
-  project: Segma debug
+  project: debug
   name: train
 
 data:
@@ -21,7 +20,7 @@ audio_config:
 
 train:
   model: 
-    name: whisperidou
+    name: pyannet
   lr: 0.001
   batch_size: 32
   max_epochs: 100

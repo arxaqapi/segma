@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from asteroid_filterbanks import Encoder, ParamSincFB
 
+from segma.config.base import Config
 from segma.models.base import BaseSegmentationModel, ConvolutionSettings
 from segma.utils.encoders import LabelEncoder  # PowersetMultiLabelEncoder
 
@@ -109,12 +110,13 @@ class PyanNet(BaseSegmentationModel):
     def __init__(
         self,
         label_encoder: LabelEncoder,
+        config: Config,
         sincnet: dict = {},
         lstm: dict = {},
         linear: dict = {},
         sample_rate: int = 16000,
     ):
-        super().__init__(label_encoder=label_encoder)
+        super().__init__(label_encoder=label_encoder, config=config)
 
         sincnet |= self.SINCNET_DEFAULTS
         sincnet["sample_rate"] = sample_rate

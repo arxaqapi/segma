@@ -48,6 +48,7 @@ def prediction(audio_path: Path, model: BaseSegmentationModel, output_p: Path):
     # NOTE - pass batch_t through model
     # predicted output, to be processed
     batch_t = model.audio_preparation_hook(batch_t.cpu().numpy())
+    batch_t = torch.tensor(batch_t)
 
     # (batch, windows, n_labels)
     model.eval()

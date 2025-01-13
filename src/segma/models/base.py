@@ -14,6 +14,7 @@ from torchmetrics.functional.classification import (
     multiclass_roc,
 )
 
+from segma.config.base import Config
 from segma.utils.encoders import LabelEncoder, PowersetMultiLabelEncoder
 from segma.utils.receptive_fields import rf_center_i, rf_size
 
@@ -66,13 +67,14 @@ class ConvolutionSettings:
 
 
 class BaseSegmentationModel(pl.LightningModule):
-    def __init__(self, label_encoder: LabelEncoder) -> None:
+    def __init__(self, label_encoder: LabelEncoder, config: Config) -> None:
         super().__init__()
         if not isinstance(label_encoder, PowersetMultiLabelEncoder):
             raise ValueError(
                 "Only PowersetMultiLabelEncoder is accepted at the moment."
             )
         self.label_encoder = label_encoder
+        self.config = config
 
     def audio_preparation_hook(self, audio_t):
         """should be overwritten in the child class,
@@ -224,4 +226,4 @@ class BaseSegmentationModel(pl.LightningModule):
         plt.close(roc_fig)
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=1e-3)
+        return torch.optim.Adam(self.parameters(), lr=self.config.train.lr)

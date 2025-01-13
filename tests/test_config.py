@@ -4,7 +4,16 @@ from segma.config import load_config
 
 
 def test_load_config():
-    cfg = load_config("tests/sample/test_config.yml")
+    cfg = load_config(
+        config_path="tests/sample/test_config_whisperidou.yml",
+    )
+
+    cfg_2 = load_config(
+        config_path="tests/sample/test_config_whisperidou.yml",
+        model_config_path="tests/sample/whisperidou.yml",
+    )
+
+    assert cfg == cfg_2
 
     assert cfg is not None
 
@@ -19,7 +28,11 @@ def test_load_config():
     assert cfg.audio_config.sample_rate == 16_000
     assert cfg.audio_config.strict_frames
 
-    assert cfg.train.model == "whisperidou"
+    assert cfg.train.model.name == "whisperidou"
+    assert cfg.train.model.config.encoder == "whisper_tiny_encoder"
+    assert cfg.train.model.config.linear == [256]
+    assert cfg.train.model.config.classifier == 256
+
     assert cfg.train.lr == 1e-3
     assert cfg.train.max_epochs == 100
     assert cfg.train.validation_metric == "auroc"
@@ -30,16 +43,21 @@ def test_load_config():
 
 def test_load_config_missing_vals():
     with pytest.raises(ValueError):
-        load_config("tests/sample/test_broken_config.yml")
+        load_config(
+            config_path="tests/sample/test_broken_config.yml",
+        )
 
 
 def test_Config_as_dict():
     import yaml
 
-    cfg = load_config("tests/sample/test_config.yml")
+    cfg = load_config(
+        config_path="tests/sample/test_config_whisperidou.yml",
+    )
     d = cfg.as_dict()
+    del d["train"]["model"]["config"]
 
-    with open("tests/sample/test_config.yml", "r") as f:
+    with open("tests/sample/test_config_whisperidou.yml", "r") as f:
         initial_d = yaml.safe_load(f)
 
     assert d is not None

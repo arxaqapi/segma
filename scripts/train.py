@@ -15,17 +15,18 @@ from lightning.pytorch.loggers import CSVLogger
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from segma.dataloader import Config, SegmentationDataLoader
+from segma.config import Config, load_config
+from segma.dataloader import SegmentationDataLoader
 from segma.models import Models, PyanNet, Whisperidou, WhisperiMax
 from segma.utils.encoders import PowersetMultiLabelEncoder
 
 
 def get_metric(metric: str) -> tuple[str, str]:
-    if args.metric == "loss":
+    if metric == "loss":
         return "min", "val/loss"
-    elif args.metric == "auroc":
+    elif metric == "auroc":
         return "max", "val/auroc"
-    elif args.metric == "fscore":
+    elif metric == "fscore":
         return "max", "val/f1_score"
     else:
         raise ValueError(
@@ -36,21 +37,11 @@ def get_metric(metric: str) -> tuple[str, str]:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--wandb", action="store_true", help="Use Wandb or not (default is set to no)."
-    )
-    parser.add_argument(
-        "--metric",
+        "-c",
+        "--config",
         type=str,
-        choices=["loss", "auroc", "fscore"],
-        default="auroc",
-        help="Evaluation metric to use.",
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        choices=["whisperidou", "whisperimax", "pyannet"],
-        default="whisperimax",
-        help="Model to use",
+        default="src/segma/config/default.yml",
+        help="Config file to be loaded and used for the training.",
     )
     parser.add_argument(
         "--tags",
@@ -58,40 +49,29 @@ if __name__ == "__main__":
         default=[],
         help="Tags to be added to the wandb logging instance.",
     )
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        choices=["debug", "baby_train"],
-        default="debug",
-        help="Dataset to use.",
-    )
 
     args = parser.parse_args()
+    cfg: Config = load_config(args.config)
 
     chkp_path = Path("models")
     if not chkp_path.exists():
         chkp_path.mkdir()
 
-    if args.dataset == "baby_train":
-        labels = ("KCHI", "OCH", "FEM", "MAL")
-    elif args.dataset == "debug":
-        labels = (
-            "male",
-            "female",
-            "key_child",
-            "other_child",
-        )
-    l_encoder = PowersetMultiLabelEncoder(labels)
+    l_encoder = PowersetMultiLabelEncoder(cfg.data.classes)
 
-    model: Whisperidou | WhisperiMax | PyanNet = Models[args.model](l_encoder)
+    model: Whisperidou | WhisperiMax | PyanNet = Models[cfg.train.model.name](
+        l_encoder, cfg
+    )
 
-    mode, monitor = get_metric(args.metric)
+    mode, monitor = get_metric(cfg.train.validation_metric)
 
     def configure_optimizers(self):
-        optim = AdamW(self.parameters(), lr=1e-3)
+        optim = AdamW(self.parameters(), lr=cfg.train.lr)
         return {
             "optimizer": optim,
-            "lr_scheduler": ReduceLROnPlateau(optim, mode=mode, patience=3),
+            "lr_scheduler": ReduceLROnPlateau(
+                optim, mode=mode, patience=cfg.train.scheduler.patience
+            ),
             "monitor": monitor,
         }
 
@@ -101,10 +81,11 @@ if __name__ == "__main__":
         f"[log @ {datetime.now().strftime('%Y%m%d_%H:%M:%S')}] - SegmentationDataLoader initializing ...",
         flush=True,
     )
-    config = Config(model.conv_settings, labels, ds_path=Path(f"data/{args.dataset}"))
+
     dm = SegmentationDataLoader(
         l_encoder,
-        config=config,
+        config=cfg,
+        conv_settings=model.conv_settings,
         audio_preparation_hook=model.audio_preparation_hook,
     )
     print(
@@ -113,46 +94,44 @@ if __name__ == "__main__":
     )
 
     reference_time = datetime.fromtimestamp(time.time()).strftime("%Y%m%d_%H%M%S")
-    save_path = Path("models")
+    save_path = Path("models") / f"{reference_time}"
 
-    if not args.wandb:
+    if not cfg.wandb.log:
         print("[log] - use CSVLogger")
 
-        save_path = save_path / f"{reference_time}"
-        save_path.mkdir(parents=True, exist_ok=True)
         logger = CSVLogger(save_dir=save_path)
     else:
         print("[log] - use WandbLogger")
         from lightning.pytorch.loggers import WandbLogger
 
-        try:
-            logger = WandbLogger(
-                project="Segma debug",
-                name="oberon_train",
-                log_model="all",
-                tags=args.tags,
-            )
-            logger.experiment.config["batch_size"] = config.batch_size
-            logger.experiment.config["num_workers"] = config.num_workers
-            logger.experiment.config["chunk_duration_s"] = config.chunk_duration_s
+        logger = WandbLogger(
+            project=cfg.wandb.project,
+            name=cfg.wandb.name,
+            log_model="all",
+            tags=args.tags,
+        )
+        # try:
+        #     logger = WandbLogger(
+        #         project=cfg.wandb.project,
+        #         name=cfg.wandb.name,
+        #         log_model="all",
+        #         tags=args.tags,
+        #     )
+        # except Exception as _:
+        #     import wandb
 
-            save_path = save_path / f"{reference_time}--{logger.experiment.id}"
-        except Exception as _:
-            import wandb
+        #     wandb.init(mode="disabled")
+        #     logger = WandbLogger(
+        #         project=cfg.wandb.project,
+        #         name=cfg.wandb.name,
+        #         log_model="all",
+        #         tags=args.tags,
+        #     )
+        logger.experiment.config.update(cfg.as_dict())
+        save_path = save_path.with_stem(save_path.stem + f"-{logger.experiment.id}")
 
-            wandb.init(mode="disabled")
-            logger = WandbLogger(
-                project="Segma debug",
-                name="oberon_train",
-                log_model="all",
-                tags=args.tags,
-            )
-            logger.experiment.config["batch_size"] = config.batch_size
-            logger.experiment.config["num_workers"] = config.num_workers
-            logger.experiment.config["chunk_duration_s"] = config.chunk_duration_s
-
-            save_path = save_path / f"{reference_time}--{logger.experiment.id}"
-        save_path.mkdir(parents=True, exist_ok=True)
+    save_path.mkdir(parents=True, exist_ok=True)
+    cfg.save(save_path / "config.yml")
 
     chkp_path = save_path / "checkpoints"
     chkp_path.mkdir(parents=True, exist_ok=True)
@@ -179,9 +158,11 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         accelerator="gpu",
         devices=1,
-        max_epochs=60,
+        max_epochs=cfg.train.max_epochs,
         logger=logger,
         callbacks=[model_checkpoint, early_stopping, LearningRateMonitor()],
+        # profiler="advanced"
+        profiler=cfg.train.profiler,
     )
 
     model = torch.compile(model)

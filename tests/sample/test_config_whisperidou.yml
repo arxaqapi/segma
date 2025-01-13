@@ -1,7 +1,6 @@
-
 wandb:
   log: True
-  project: Segma debug
+  project: debug
   name: train
 
 data:

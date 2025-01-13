@@ -19,7 +19,8 @@ audio_config:
   strict_frames: true
 
 train:
-  model: whisperidou
+  model: 
+    name: whisperimax
   lr: 0.001
   batch_size: 32
   max_epochs: 100

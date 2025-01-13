@@ -1,0 +1,12 @@
+encoder: whisper_tiny_encoder
+
+lstm:
+  hidden_size: 128
+  num_layers: 4
+  bidirectional: true
+  dropout: 0.5
+
+linear: 
+  - 128
+  - 128
+classifier: 128

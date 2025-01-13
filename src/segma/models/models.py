@@ -4,13 +4,14 @@ from transformers import WhisperFeatureExtractor
 from transformers.modeling_outputs import BaseModelOutput
 from transformers.models.whisper.modeling_whisper import WhisperEncoder
 
+from segma.config.base import Config
 from segma.models.base import BaseSegmentationModel, ConvolutionSettings
 from segma.utils.encoders import LabelEncoder
 
 
 class Miniseg(BaseSegmentationModel):
-    def __init__(self, label_encoder: LabelEncoder) -> None:
-        super().__init__(label_encoder)
+    def __init__(self, label_encoder: LabelEncoder, config: Config) -> None:
+        super().__init__(label_encoder=label_encoder, config=config)
 
         self.head = nn.Conv1d(1, 80, kernel_size=400, stride=160, padding=200)
         self.net = nn.Sequential(
@@ -36,9 +37,8 @@ class Miniseg(BaseSegmentationModel):
 
 
 class Minisinc(BaseSegmentationModel):
-    def __init__(self, label_encoder: LabelEncoder) -> None:
-        super().__init__(label_encoder)
-        # assert isinstance(label_encoder, PowersetMultiLabelEncoder)
+    def __init__(self, label_encoder: LabelEncoder, config: Config) -> None:
+        super().__init__(label_encoder=label_encoder, config=config)
 
         self.net = nn.Sequential(
             nn.Conv1d(1, 80, kernel_size=251, stride=10, padding=0),
@@ -69,15 +69,13 @@ class Minisinc(BaseSegmentationModel):
 
 
 class Whisperidou(BaseSegmentationModel):
-    def __init__(
-        self, label_encoder: LabelEncoder, encoder_model: str = "openai/whisper-tiny"
-    ) -> None:
-        super().__init__(label_encoder)
+    def __init__(self, label_encoder: LabelEncoder, config: Config) -> None:
+        super().__init__(label_encoder=label_encoder, config=config)
 
         self.feature_extractor = WhisperFeatureExtractor()
 
         self.w_encoder = WhisperEncoder.from_pretrained(
-            "whisper_tiny_encoder", local_files_only=True
+            self.config.train.model.config.encoder, local_files_only=True
         )
         self.w_encoder._freeze_parameters()
 
@@ -109,15 +107,13 @@ class Whisperidou(BaseSegmentationModel):
 
 
 class WhisperiMax(BaseSegmentationModel):
-    def __init__(
-        self, label_encoder: LabelEncoder, encoder_model: str = "openai/whisper-tiny"
-    ) -> None:
-        super().__init__(label_encoder)
+    def __init__(self, label_encoder: LabelEncoder, config: Config) -> None:
+        super().__init__(label_encoder=label_encoder, config=config)
 
         self.feature_extractor = WhisperFeatureExtractor()
 
         self.w_encoder = WhisperEncoder.from_pretrained(
-            "whisper_tiny_encoder", local_files_only=True
+            self.config.train.model.config.encoder, local_files_only=True
         )
         self.w_encoder._freeze_parameters()
 

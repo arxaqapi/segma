@@ -1,7 +1,6 @@
 """Data loading utilies"""
 
 from collections import defaultdict
-from dataclasses import dataclass
 from functools import reduce
 from math import ceil, floor
 from pathlib import Path
@@ -15,6 +14,7 @@ from interlap import InterLap
 from torch.utils.data import DataLoader, IterableDataset
 
 from segma.annotation import AudioAnnotation
+from segma.config import Config
 from segma.models.base import ConvolutionSettings
 from segma.utils.conversions import (
     frames_to_seconds,
@@ -48,17 +48,6 @@ def total_annotation_duration(annotations: list[AudioAnnotation]) -> float:
     return reduce(lambda b, e: b + e.duration_ms, annotations, 0)
 
 
-@dataclass(frozen=True)
-class Config:
-    conv_settings: ConvolutionSettings
-    labels: tuple[str, ...]
-    sample_rate: int = 16_000
-    chunk_duration_s: float = 2.0
-    batch_size: int = 32
-    num_workers: int = 8
-    ds_path: Path = Path("data/baby_train")
-
-
 class SegmentationDataLoader(pl.LightningDataModule):
     """The `SegmentationDataLoader` class prepares the dataset by loading all usefull metadata
     and creating all intervals objects used later on in the AudioSegmentationDataset class.
@@ -68,11 +57,13 @@ class SegmentationDataLoader(pl.LightningDataModule):
         self,
         label_encoder: LabelEncoder,
         config: Config,
+        conv_settings: ConvolutionSettings,
         audio_preparation_hook: Callable | None = None,
     ) -> None:
         super().__init__()
         self.label_encoder = label_encoder
         self.config = config
+        self.conv_settings = conv_settings
         self.audio_preparation_hook = audio_preparation_hook
 
         self.rng = np.random.default_rng()
@@ -80,7 +71,9 @@ class SegmentationDataLoader(pl.LightningDataModule):
         # NOTE - load train, val, test uris
         # dict from subset to list of uris
         self.uris: dict[str, list[str]] = {
-            subset: load_uris((config.ds_path / subset).with_suffix(".txt"))
+            subset: load_uris(
+                (Path(config.data.dataset_path) / subset).with_suffix(".txt")
+            )
             for subset in ("train", "val", "test")
         }
 
@@ -98,10 +91,14 @@ class SegmentationDataLoader(pl.LightningDataModule):
             duration_l = []
             for uri in self.uris[subset]:
                 # total audio duration in number of frames sampled at self.sample_rate
-                uri_path = (config.ds_path / "wav" / uri).with_suffix(".wav").resolve()
+                uri_path = (
+                    (Path(config.data.dataset_path) / "wav" / uri)
+                    .with_suffix(".wav")
+                    .resolve()
+                )
                 info = torchaudio.info(uri=uri_path)
                 annotations = load_annotations(
-                    (config.ds_path / "aa" / uri).with_suffix(".aa")
+                    (Path(config.data.dataset_path) / "aa" / uri).with_suffix(".aa")
                 )
 
                 if not self._validate_uri(
@@ -114,7 +111,7 @@ class SegmentationDataLoader(pl.LightningDataModule):
 
                 # REVIEW - annotation are stored here and reused later, such that filtering has to happen only once.
                 annotations = filter_annotations(
-                    annotations, covered_labels=config.labels
+                    annotations, covered_labels=config.data.classes
                 )
                 _subds_to_annotations[subset].append(annotations)
 
@@ -151,13 +148,13 @@ class SegmentationDataLoader(pl.LightningDataModule):
                                 int(
                                     milliseconds_to_frames(
                                         annot.start_time_ms,
-                                        sample_rate=config.sample_rate,
+                                        sample_rate=config.audio_config.sample_rate,
                                     )
                                 ),
                                 int(
                                     milliseconds_to_frames(
                                         annot.end_time_ms,
-                                        sample_rate=config.sample_rate,
+                                        sample_rate=config.audio_config.sample_rate,
                                     )
                                 ),
                                 # self.label_encoder(annot.label),
@@ -175,12 +172,15 @@ class SegmentationDataLoader(pl.LightningDataModule):
         (sample_rate does not match, label do not match, shorter than chunk_duration_s),
         return False
         """
-        # TODO - handle the case when audio_duraton == chunk_duration_s -> pick index 0
+        # TODO - handle the case when audio_duration == chunk_duration_s -> pick index 0
         # TODO - raise warnings
-        if frames_to_seconds(num_frames, sample_rate) <= self.config.chunk_duration_s:
+        if (
+            frames_to_seconds(num_frames, sample_rate)
+            <= self.config.audio_config.chunk_duration_s
+        ):
             return False
 
-        if sample_rate != self.config.sample_rate:
+        if sample_rate != self.config.audio_config.sample_rate:
             return False
 
         for annot in annotations:
@@ -195,12 +195,13 @@ class SegmentationDataLoader(pl.LightningDataModule):
                 durations=self.subds_to_durations["train"],
                 annotations=self.subds_to_annotations["train"],
                 config=self.config,
+                conv_settings=self.conv_settings,
                 label_encoder=self.label_encoder,
                 audio_preparation_hook=self.audio_preparation_hook,
             ),
-            batch_size=self.config.batch_size,
+            batch_size=self.config.train.batch_size,
             drop_last=True,
-            num_workers=self.config.num_workers,
+            num_workers=self.config.train.dataloader.num_workers,
             persistent_workers=True,
             multiprocessing_context="fork"
             if torch.backends.mps.is_available()
@@ -214,12 +215,13 @@ class SegmentationDataLoader(pl.LightningDataModule):
                 durations=self.subds_to_durations["val"],
                 annotations=self.subds_to_annotations["val"],
                 config=self.config,
+                conv_settings=self.conv_settings,
                 label_encoder=self.label_encoder,
                 audio_preparation_hook=self.audio_preparation_hook,
             ),
-            batch_size=self.config.batch_size,
+            batch_size=self.config.train.batch_size,
             drop_last=True,
-            num_workers=self.config.num_workers,
+            num_workers=self.config.train.dataloader.num_workers,
             persistent_workers=True,
             multiprocessing_context="fork"
             if torch.backends.mps.is_available()
@@ -238,6 +240,7 @@ class AudioSegmentationDataset(IterableDataset):
         durations: np.ndarray,
         annotations: list[InterLap],
         config: Config,
+        conv_settings: ConvolutionSettings,
         label_encoder: LabelEncoder,
         audio_preparation_hook: Callable | None = None,
     ):
@@ -246,14 +249,16 @@ class AudioSegmentationDataset(IterableDataset):
         self.annotations = annotations
 
         self.config = config
+        self.conv_settings = conv_settings
         self.label_encoder = label_encoder
         self.audio_preparation_hook = audio_preparation_hook
 
         self.windows = generate_frames(
-            config.conv_settings,
-            config.sample_rate,
-            config.chunk_duration_s,
-            strict=False,
+            conv_settings=self.conv_settings,
+            sample_rate=config.audio_config.sample_rate,
+            chunk_duration_s=config.audio_config.chunk_duration_s,
+            # TODO - config
+            strict=config.audio_config.strict_frames,
         )
 
         assert len(uris) == durations.shape[0]
@@ -263,7 +268,9 @@ class AudioSegmentationDataset(IterableDataset):
         # ensures each worker has a separate seed
         rng = np.random.default_rng(seed=w_info.seed)
 
-        durations_f = floor(seconds_to_frames(self.config.chunk_duration_s))
+        durations_f = floor(
+            seconds_to_frames(self.config.audio_config.chunk_duration_s)
+        )
         while True:
             # NOTE 1. sample a file depending on its annotated or audio duration
             # audio_duration_f, annotated_duration_f
@@ -285,7 +292,9 @@ class AudioSegmentationDataset(IterableDataset):
             #     'y': overlaping frames corresponding to the model output [[...n-labels], ...] }
             # (32000)
             waveform = self.load_audio(
-                (self.config.ds_path / "wav" / self.uris[uri_i]).with_suffix(".wav"),
+                (
+                    Path(self.config.data.dataset_path) / "wav" / self.uris[uri_i]
+                ).with_suffix(".wav"),
                 start_f=start_index_f,
                 duration_f=durations_f,
             )
@@ -324,8 +333,11 @@ class AudioSegmentationDataset(IterableDataset):
         # REVIEW - file error with iterable dataset len that has to be an integer
         return int(
             max(
-                ceil(total_annotated_duration_s / self.config.chunk_duration_s),
-                self.config.batch_size,
+                ceil(
+                    total_annotated_duration_s
+                    / self.config.audio_config.chunk_duration_s
+                ),
+                self.config.train.batch_size,
             )
         )
 

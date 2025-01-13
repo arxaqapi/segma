@@ -1,0 +1,5 @@
+encoder: whisper_tiny_encoder
+
+linear:
+  - 256
+classifier: 256

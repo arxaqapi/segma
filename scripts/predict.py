@@ -3,16 +3,20 @@ from pathlib import Path
 
 import torch
 
-from segma.models import PyanNet, Whisperidou
+from segma.config import Config, load_config
+from segma.models import Models
 from segma.predict import prediction
 from segma.utils.encoders import PowersetMultiLabelEncoder
 
 if __name__ == "__main__":
-    l_encoder = PowersetMultiLabelEncoder(
-        ["male", "female", "key_child", "other_child"]
-    )
-
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-c",
+        "--config",
+        type=str,
+        default="src/segma/config/default.yml",
+        help="Config file to be loaded and used for the training.",
+    )
     parser.add_argument("--uris", help="list of uris to use for prediction")
     parser.add_argument("--wavs", default="data/debug/wav")
     parser.add_argument(
@@ -23,7 +27,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--output",
-        help="Path to a pretrained model checkpoint.",
+        help="Output Path to the folder that will contain the final predictions.",
     )
 
     args = parser.parse_args()
@@ -32,6 +36,10 @@ if __name__ == "__main__":
 
     assert args.wavs.exists()
     assert args.ckpt.exists()
+
+    cfg: Config = load_config(args.config)
+
+    l_encoder = PowersetMultiLabelEncoder(labels=cfg.data.classes)
 
     # NOTE - resolve output_path
     # if path is model/last/best -> resolve symlink
@@ -43,9 +51,9 @@ if __name__ == "__main__":
         except:
             args.output = Path("segma_out")
 
-    # model = PyanNet.load_from_checkpoint(
-    model = Whisperidou.load_from_checkpoint(
-        checkpoint_path=args.ckpt, label_encoder=l_encoder
+    # REVIEW
+    model = Models[cfg.train.model.name].load_from_checkpoint(
+        checkpoint_path=args.ckpt, label_encoder=l_encoder, config=cfg
     )
 
     model.to(torch.device("mps"))
@@ -62,3 +70,15 @@ if __name__ == "__main__":
         for wav_f in args.wavs.glob("*.wav"):
             print(f"[log] - running inference for file: '{wav_f.stem}'")
             prediction(wav_f, model=model, output_p=args.output)
+
+    # NOTE - symlink to models/last/[rttm|aa]
+    static_p = Path("models/last")
+    static_p.mkdir(parents=True, exist_ok=True)
+    rttm_static_p = static_p / "rttm"
+    aa_static_p = static_p / "aa"
+
+    rttm_static_p.unlink(missing_ok=True)
+    rttm_static_p.symlink_to((args.output / "rttm").absolute())
+
+    aa_static_p.unlink(missing_ok=True)
+    aa_static_p.symlink_to((args.output / "aa").absolute())

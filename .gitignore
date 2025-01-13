@@ -6,6 +6,7 @@ notebooks/
 /models/
 whisper_tiny_encoder/
 *.tar.gz
+scripts/jz
 
 # extra
 .vscode

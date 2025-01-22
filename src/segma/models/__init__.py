@@ -1,5 +1,5 @@
 from segma.models.models import Whisperidou, WhisperiMax
-from segma.models.pyannet import PyanNet
+from segma.models.pyannet import PyanNet, PyanNetSlim
 
 # from segma.models.utils import ConvolutionSettings
 
@@ -12,6 +12,8 @@ Models = {
     "whisperimax": WhisperiMax,
     "pyannet": PyanNet,
     "PyanNet": PyanNet,
+    "pyannet_slim": PyanNetSlim,
+    "PyanNet_slim": PyanNetSlim,
 }
 
 

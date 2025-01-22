@@ -5,7 +5,9 @@ import torch
 
 from segma.config import Config, load_config
 from segma.models import Models
-from segma.predict import prediction
+from segma.predict import sliding_prediction
+
+# from segma.predict import prediction
 from segma.utils.encoders import PowersetMultiLabelEncoder
 
 if __name__ == "__main__":
@@ -15,7 +17,7 @@ if __name__ == "__main__":
         "--config",
         type=str,
         default="src/segma/config/default.yml",
-        help="Config file to be loaded and used for the training.",
+        help="Config file to be loaded and used for inference.",
     )
     parser.add_argument("--uris", help="list of uris to use for prediction")
     parser.add_argument("--wavs", default="data/debug/wav")
@@ -34,8 +36,10 @@ if __name__ == "__main__":
     args.wavs = Path(args.wavs)
     args.ckpt = Path(args.ckpt)
 
-    assert args.wavs.exists()
-    assert args.ckpt.exists()
+    if not args.wavs.exists():
+        raise ValueError(f"Path `{args.wavs=}` does not exists")
+    if not args.ckpt.exists():
+        raise ValueError(f"Path `{args.ckpt=}` does not exists")
 
     cfg: Config = load_config(args.config)
 
@@ -65,11 +69,13 @@ if __name__ == "__main__":
         for uri in uris:
             wav_f = (args.wavs / uri).with_suffix(".wav")
             print(f"[log] - running inference for file: '{wav_f.stem}'")
-            prediction(wav_f, model=model, output_p=args.output)
+            # prediction(wav_f, model=model, output_p=args.output)
+            sliding_prediction(wav_f, model=model, output_p=args.output, config=cfg)
     else:
         for wav_f in args.wavs.glob("*.wav"):
             print(f"[log] - running inference for file: '{wav_f.stem}'")
-            prediction(wav_f, model=model, output_p=args.output)
+            # prediction(wav_f, model=model, output_p=args.output)
+            sliding_prediction(wav_f, model=model, output_p=args.output, config=cfg)
 
     # NOTE - symlink to models/last/[rttm|aa]
     static_p = Path("models/last")

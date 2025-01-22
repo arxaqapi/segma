@@ -132,6 +132,7 @@ def gen_sine(f: int = 440, duration_s: float = 1.0, sr: int = 16_000):
 
 
 def _plot_spectro(waveform, fig_title: str = "audio.png", sr: int = 16_000):
+    """Generate a spectorgram of the given waveform and writes it to disk as a `.png` image."""
     import matplotlib.pyplot as plt
     import scipy as sp
 
@@ -156,11 +157,12 @@ def gen_classification(
     audio_duration_s: float = 60.0,
     labels: list[str] = ["male", "female", "key_child", "other_child"],
     per_split: int = 5,
+    gen_spectro: bool = False,
 ):
     wav_out = output / "wav"
     wav_out.mkdir(parents=True, exist_ok=True)
 
-    annotations_out = output / "annotations"
+    annotations_out = output / "aa"
     annotations_out.mkdir(parents=True, exist_ok=True)
 
     rttms_out = output / "rttm"
@@ -201,7 +203,10 @@ def gen_classification(
             audio = gen_audio_from_annot(
                 annots, label_to_freq, audio_duration_s=audio_duration_s
             )
-            _plot_spectro(audio[0], fig_title=str(spectro_out / f"{uid}_spectro.png"))
+            if gen_spectro:
+                _plot_spectro(
+                    audio[0], fig_title=str(spectro_out / f"{uid}_spectro.png")
+                )
 
             # NOTE - write wav file and annotations (.aa, .rttm, .uem)
             wavfile.write((wav_out / uid).with_suffix(".wav"), 16_000, audio.T)
@@ -217,4 +222,30 @@ def gen_classification(
 
 
 if __name__ == "__main__":
-    gen_classification(output=Path("data/debug"), per_split=20)
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-n",
+        "--n_samples",
+        required=True,
+        help="Number of examples per split",
+        type=int,
+    )
+    parser.add_argument(
+        "--spectrogram",
+        help="Boolean flag to determine if spectograms need to be generated.",
+        action="store_true",
+    )
+    args = parser.parse_args()
+
+    db_path = Path(f"data/debug_{args.n_samples}")
+    if not db_path.exists():
+        print(
+            f"[log] - Generating a dummy dataset of size {args.n_samples * 3} ({args.n_samples} * 3)."
+        )
+        gen_classification(
+            output=db_path, per_split=args.n_samples, gen_spectro=args.spectrogram
+        )
+    else:
+        print("[log] - dataset already exists, nothing will happen.")

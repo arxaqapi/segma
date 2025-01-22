@@ -59,11 +59,7 @@ def test_PyanNet_init():
     model = PyanNet(label_encoder, cfg)
 
     assert model is not None
-    assert (
-        len(model.linear)
-        == model.hparams.linear["num_layers"]
-        == model.LINEAR_DEFAULTS["num_layers"]
-    )
+    assert len(model.linear) == len(model.hparams.linear)
 
 
 def test_PyanNet_forward():

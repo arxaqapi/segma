@@ -94,9 +94,11 @@ class Whisperidou(BaseSegmentationModel):
         logits = self.classifier(enc_x.last_hidden_state)
 
         # Since whisper expects 30s audio segments as input (480_000 frames)
-        # we have to truncate the output to only cover 2s of audio
-        logits = logits[:, : self.conv_settings.n_windows(strict=False), :]
-
+        # we have to truncate the output to only cover x seconds of audio
+        truncation_i = self.conv_settings.n_windows(
+            self.config.audio_config.chunk_duration_f, strict=False
+        )
+        logits = logits[:, :truncation_i, :]
         return torch.nn.functional.softmax(logits, dim=-1)
 
     def audio_preparation_hook(self, audio_t):
@@ -143,7 +145,10 @@ class WhisperiMax(BaseSegmentationModel):
         enc_x: BaseModelOutput = self.w_encoder(x).last_hidden_state
         # Since whisper expects 30s audio segments as input (480_000 frames)
         # we have to truncate the output to only cover 2s of audio
-        enc_x = enc_x[:, : self.conv_settings.n_windows(strict=False), :]
+        truncation_i = self.conv_settings.n_windows(
+            self.config.audio_config.chunk_duration_f, strict=False
+        )
+        enc_x = enc_x[:, :truncation_i, :]
 
         lstm_out, _ = self.lstm(enc_x)
         linear_out = self.linear(lstm_out)

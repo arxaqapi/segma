@@ -357,7 +357,10 @@ def generate_frames(
 
     # if strict, each window will have the exact same size `rf_size(...)`,
     # else allow shorter frames that are then clipped
-    n_windows = conv_settings.n_windows(strict=strict)
+    # 352 with pyannet and cds=6
+    n_windows = conv_settings.n_windows(
+        chunk_duration_f=chunk_duration_f, strict=strict
+    )
     wins = [
         [
             rf_start_i(i, conv_settings.strides, conv_settings.paddings),

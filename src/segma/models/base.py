@@ -25,7 +25,7 @@ class ConvolutionSettings:
     strides: tuple[int, ...]
     paddings: tuple[int, ...]
 
-    def n_windows(self, chunk_duration_f: int = 32_000, strict: bool = True) -> int:
+    def n_windows(self, chunk_duration_f: int, strict: bool = True) -> int:
         """compute the total number of covered windows for a given audio duration
 
         Args:

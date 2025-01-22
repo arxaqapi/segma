@@ -258,6 +258,7 @@ class AudioSegmentationDataset(IterableDataset):
             sample_rate=config.audio_config.sample_rate,
             chunk_duration_s=config.audio_config.chunk_duration_s,
             # TODO - config
+            # strict_frames: True is pyannet - False if whisper
             strict=config.audio_config.strict_frames,
         )
 
@@ -313,7 +314,10 @@ class AudioSegmentationDataset(IterableDataset):
 
     def load_audio(self, audio_file_p: Path, start_f: int, duration_f: int):
         """loads only wanted segment from audio and downsamples it."""
-        assert duration_f == 32_000
+        if duration_f != self.config.audio_config.chunk_duration_s * 16_000:
+            raise ValueError(
+                f"Error in `AudioSegmentationDataset.load_audio()`: `{duration_f=}` != {self.config.audio_config.chunk_duration_s * 16_000=}"
+            )
         audio_t, _sr = torchaudio.load(
             audio_file_p.resolve(), frame_offset=start_f, num_frames=duration_f
         )
@@ -353,6 +357,7 @@ def generate_frames(
     (to be offsetted)
     """
     # should be 32_000 for 2s @ 16khz
+    # should be 96_000 for 6s @ 16khz
     chunk_duration_f = int(seconds_to_frames(chunk_duration_s, sample_rate))
 
     # if strict, each window will have the exact same size `rf_size(...)`,

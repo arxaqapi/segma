@@ -3,6 +3,7 @@ import itertools
 import torch
 import torch.nn as nn
 from asteroid_filterbanks import Encoder, ParamSincFB
+from torchmetrics.functional.classification import multiclass_auroc, multiclass_f1_score
 
 from segma.config.base import Config
 from segma.models.base import BaseSegmentationModel, ConvolutionSettings
@@ -98,39 +99,33 @@ class PyanNet(BaseSegmentationModel):
         i.e. two linear layers with 128 units each.
     """
 
-    SINCNET_DEFAULTS = {"stride": 10}
-    LSTM_DEFAULTS = {
-        "hidden_size": 128,
-        "num_layers": 4,
-        "bidirectional": True,
-        "dropout": 0.0,
-    }
-    LINEAR_DEFAULTS = {"hidden_size": 128, "num_layers": 2}
-
     def __init__(
         self,
         label_encoder: LabelEncoder,
         config: Config,
-        sincnet: dict = {},
-        lstm: dict = {},
-        linear: dict = {},
-        sample_rate: int = 16000,
+        weight_loss: bool = False,
     ):
-        super().__init__(label_encoder=label_encoder, config=config)
+        super().__init__(
+            label_encoder=label_encoder, config=config, weight_loss=weight_loss
+        )
 
-        sincnet |= self.SINCNET_DEFAULTS
-        sincnet["sample_rate"] = sample_rate
+        sincnet = self.config.train.model.config.sincnet
+        lstm_c = self.config.train.model.config.lstm
 
-        lstm |= self.LSTM_DEFAULTS
-        lstm["batch_first"] = True
+        self.save_hyperparameters(self.config.train.model.config.as_dict())
 
-        linear |= self.LINEAR_DEFAULTS
-        self.save_hyperparameters("sincnet", "lstm", "linear")
+        self.sincnet = SincNet(
+            sample_rate=self.config.audio_config.sample_rate, stride=sincnet.stride
+        )
 
-        self.sincnet = SincNet(**self.hparams.sincnet)
-
-        multi_layer_lstm = dict(lstm)
-        self.lstm = nn.LSTM(60, **multi_layer_lstm)
+        self.lstm = nn.LSTM(
+            input_size=60,
+            hidden_size=lstm_c.hidden_size,
+            num_layers=lstm_c.num_layers,
+            batch_first=True,
+            bidirectional=lstm_c.bidirectional,
+            dropout=lstm_c.dropout,
+        )
 
         lstm_out_features: int = self.hparams.lstm["hidden_size"] * (
             2 if self.hparams.lstm["bidirectional"] else 1
@@ -142,13 +137,12 @@ class PyanNet(BaseSegmentationModel):
                     [
                         lstm_out_features,
                     ]
-                    + [self.hparams.linear["hidden_size"]]
-                    * self.hparams.linear["num_layers"]
+                    + [self.hparams.linear[0]] * len(self.hparams.linear)
                 )
             ]
         )
         self.classifier = nn.Linear(
-            self.hparams.linear["hidden_size"], len(self.label_encoder.labels)
+            self.hparams.classifier, len(self.label_encoder.labels)
         )
         self.activation = nn.Sigmoid()
 
@@ -179,8 +173,119 @@ class PyanNet(BaseSegmentationModel):
             outputs.transpose(2, 1)
         )
 
-        if self.hparams.linear["num_layers"] > 0:
+        if len(self.hparams.linear) > 0:
             for linear in self.linear:
                 outputs = torch.nn.functional.leaky_relu(linear(outputs))
 
         return self.activation(self.classifier(outputs))
+
+
+class PyanNetSlim(BaseSegmentationModel):
+    def __init__(
+        self, label_encoder: LabelEncoder, config: Config, weight_loss: bool = False
+    ):
+        super().__init__(
+            label_encoder=label_encoder, config=config, weight_loss=weight_loss
+        )
+
+        sincnet = self.config.train.model.config.sincnet
+
+        self.save_hyperparameters(self.config.train.model.config.as_dict())
+
+        self.sincnet = SincNet(
+            sample_rate=self.config.audio_config.sample_rate, stride=sincnet.stride
+        )
+
+        # self.linear_stack = nn.ModuleList(
+        self.linear = nn.ModuleList(
+            [
+                nn.Linear(60, self.hparams.linear[0]),
+                nn.LeakyReLU(),
+                nn.Dropout(),
+                nn.Linear(self.hparams.linear[0], self.hparams.linear[1]),
+                nn.LeakyReLU(),
+                nn.Dropout(),
+            ]
+        )
+        self.classifier = nn.Linear(
+            self.hparams.classifier, len(self.label_encoder.labels)
+        )
+        self.activation = nn.Sigmoid()
+
+        # Sincnet + pyannet
+        self.conv_settings = ConvolutionSettings(
+            kernels=(251, 3, 5, 3, 5, 3),
+            strides=(self.sincnet.stride, 3, 1, 3, 1, 3),
+            paddings=(0, 0, 0, 0, 0, 0),
+        )
+
+    def forward(self, waveforms: torch.Tensor) -> torch.Tensor:
+        """Pass forward
+        waveforms : (batch, channel, sample)
+        scores : (batch, frame, classes)
+        """
+        # adjust dimensions
+        waveforms = waveforms[:, None, :]
+        outputs = self.sincnet(waveforms)
+        # (batch, feature, frame) -> (batch, frame, feature)
+        outputs = outputs.transpose(2, 1)
+
+        for layer in self.linear:
+            outputs = layer(outputs)
+
+        return self.activation(self.classifier(outputs))
+
+    def validation_step(self, batch, batch_idx):
+        x = batch["x"]
+        y_target = batch["y"]
+        y_pred = self.forward(x)
+
+        y_target = y_target.view(-1, len(self.label_encoder.labels))
+        y_pred = y_pred.view(-1, len(self.label_encoder.labels))
+
+        # NOTE - check shape sizes
+        if y_target.shape != y_pred.shape:
+            raise ValueError(
+                f"y_target and y_predict shapes do not match, got shapes: {y_target.shape=} {y_pred.shape=}"
+            )
+
+        if self.config.train.validation_metric == "loss":
+            loss = torch.nn.functional.cross_entropy(
+                input=y_pred, target=y_target, weight=self.weights
+            )
+            self.log(
+                "val/loss",
+                loss,
+                on_step=True,
+                on_epoch=True,
+                prog_bar=True,
+                logger=True,
+            )
+        if self.config.train.validation_metric == "auroc":
+            auroc_per_class = multiclass_auroc(
+                preds=y_pred,
+                target=y_target.argmax(-1),
+                num_classes=len(self.label_encoder),
+                average="none",
+            )
+            self.log(
+                "val/auroc",
+                auroc_per_class.mean(),
+                on_epoch=True,
+                prog_bar=True,
+                logger=True,
+            )
+        if self.config.train.validation_metric == "f1_score":
+            f1_score = multiclass_f1_score(
+                preds=y_pred,
+                target=y_target.argmax(-1),
+                num_classes=len(self.label_encoder),
+                # average="none",
+            )
+            self.log(
+                "val/f1_score",
+                f1_score,
+                on_epoch=True,
+                prog_bar=True,
+                logger=True,
+            )

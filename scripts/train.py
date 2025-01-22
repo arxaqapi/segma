@@ -17,7 +17,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from segma.config import Config, load_config
 from segma.dataloader import SegmentationDataLoader
-from segma.models import Models, PyanNet, Whisperidou, WhisperiMax
+from segma.models import Models, PyanNet, PyanNetSlim, Whisperidou, WhisperiMax
 from segma.utils.encoders import PowersetMultiLabelEncoder
 
 
@@ -59,9 +59,9 @@ if __name__ == "__main__":
 
     l_encoder = PowersetMultiLabelEncoder(cfg.data.classes)
 
-    model: Whisperidou | WhisperiMax | PyanNet = Models[cfg.train.model.name](
-        l_encoder, cfg
-    )
+    model: Whisperidou | WhisperiMax | PyanNet | PyanNetSlim = Models[
+        cfg.train.model.name
+    ](l_encoder, cfg)
 
     mode, monitor = get_metric(cfg.train.validation_metric)
 

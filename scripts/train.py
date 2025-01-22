@@ -5,7 +5,6 @@ from pathlib import Path
 from types import MethodType
 
 import lightning as pl
-import torch
 from lightning.pytorch.callbacks import (
     EarlyStopping,
     LearningRateMonitor,
@@ -26,7 +25,7 @@ def get_metric(metric: str) -> tuple[str, str]:
         return "min", "val/loss"
     elif metric == "auroc":
         return "max", "val/auroc"
-    elif metric == "fscore":
+    elif metric == "fscore" or metric == "f1_score":
         return "max", "val/f1_score"
     else:
         raise ValueError(
@@ -164,8 +163,6 @@ if __name__ == "__main__":
         # profiler="advanced"
         profiler=cfg.train.profiler,
     )
-
-    model = torch.compile(model)
 
     print(f"[log @ {datetime.now().strftime('%Y%m%d_%H%M')}] - started training")
     trainer.fit(model, datamodule=dm)

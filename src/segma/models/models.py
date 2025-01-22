@@ -10,8 +10,12 @@ from segma.utils.encoders import LabelEncoder
 
 
 class Miniseg(BaseSegmentationModel):
-    def __init__(self, label_encoder: LabelEncoder, config: Config) -> None:
-        super().__init__(label_encoder=label_encoder, config=config)
+    def __init__(
+        self, label_encoder: LabelEncoder, config: Config, weight_loss: bool
+    ) -> None:
+        super().__init__(
+            label_encoder=label_encoder, config=config, weight_loss=weight_loss
+        )
 
         self.head = nn.Conv1d(1, 80, kernel_size=400, stride=160, padding=200)
         self.net = nn.Sequential(
@@ -37,8 +41,12 @@ class Miniseg(BaseSegmentationModel):
 
 
 class Minisinc(BaseSegmentationModel):
-    def __init__(self, label_encoder: LabelEncoder, config: Config) -> None:
-        super().__init__(label_encoder=label_encoder, config=config)
+    def __init__(
+        self, label_encoder: LabelEncoder, config: Config, weight_loss: bool
+    ) -> None:
+        super().__init__(
+            label_encoder=label_encoder, config=config, weight_loss=weight_loss
+        )
 
         self.net = nn.Sequential(
             nn.Conv1d(1, 80, kernel_size=251, stride=10, padding=0),
@@ -69,8 +77,12 @@ class Minisinc(BaseSegmentationModel):
 
 
 class Whisperidou(BaseSegmentationModel):
-    def __init__(self, label_encoder: LabelEncoder, config: Config) -> None:
-        super().__init__(label_encoder=label_encoder, config=config)
+    def __init__(
+        self, label_encoder: LabelEncoder, config: Config, weight_loss: bool = False
+    ) -> None:
+        super().__init__(
+            label_encoder=label_encoder, config=config, weight_loss=weight_loss
+        )
 
         self.feature_extractor = WhisperFeatureExtractor()
 
@@ -109,8 +121,12 @@ class Whisperidou(BaseSegmentationModel):
 
 
 class WhisperiMax(BaseSegmentationModel):
-    def __init__(self, label_encoder: LabelEncoder, config: Config) -> None:
-        super().__init__(label_encoder=label_encoder, config=config)
+    def __init__(
+        self, label_encoder: LabelEncoder, config: Config, weight_loss: bool
+    ) -> None:
+        super().__init__(
+            label_encoder=label_encoder, config=config, weight_loss=weight_loss
+        )
 
         self.feature_extractor = WhisperFeatureExtractor()
 

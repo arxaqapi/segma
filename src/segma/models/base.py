@@ -67,7 +67,9 @@ class ConvolutionSettings:
 
 
 class BaseSegmentationModel(pl.LightningModule):
-    def __init__(self, label_encoder: LabelEncoder, config: Config) -> None:
+    def __init__(
+        self, label_encoder: LabelEncoder, config: Config, weight_loss: bool
+    ) -> None:
         super().__init__()
         if not isinstance(label_encoder, PowersetMultiLabelEncoder):
             raise ValueError(
@@ -75,6 +77,14 @@ class BaseSegmentationModel(pl.LightningModule):
             )
         self.label_encoder = label_encoder
         self.config = config
+        self.weights = (
+            torch.tensor(
+                [0.4] + [1] * (len(self.label_encoder.labels) - 1),
+                device=torch.device("mps"),
+            )
+            if weight_loss
+            else None
+        )
 
     def audio_preparation_hook(self, audio_t):
         """should be overwritten in the child class,
@@ -87,10 +97,13 @@ class BaseSegmentationModel(pl.LightningModule):
         y_pred = self.forward(x)
 
         # reduce first 2 dimensions
-        y_target = y_target.view(-1, len(self.label_encoder.labels))
-        y_pred = y_pred.view(-1, len(self.label_encoder.labels))
+        n_labels = len(self.label_encoder.labels)
+        y_target = y_target.view(-1, n_labels)
+        y_pred = y_pred.view(-1, n_labels)
 
-        loss = torch.nn.functional.cross_entropy(input=y_pred, target=y_target)
+        loss = torch.nn.functional.cross_entropy(
+            input=y_pred, target=y_target, weight=self.weights
+        )
         self.log(
             "train/loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
         )
@@ -110,7 +123,9 @@ class BaseSegmentationModel(pl.LightningModule):
                 f"y_target and y_predict shapes do not match, got shapes: {y_target.shape=} {y_pred.shape=}"
             )
 
-        loss = torch.nn.functional.cross_entropy(input=y_pred, target=y_target)
+        loss = torch.nn.functional.cross_entropy(
+            input=y_pred, target=y_target, weight=self.weights
+        )
         self.log(
             "val/loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
         )

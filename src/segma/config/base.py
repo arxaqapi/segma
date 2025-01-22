@@ -6,99 +6,7 @@ import yaml
 
 
 @dataclass
-class WandbConfig:
-    log: bool
-    project: str
-    name: str
-
-
-@dataclass
-class DataConfig:
-    dataset_path: str
-    classes: list[str]
-
-
-@dataclass
-class AudioConfig:
-    chunk_duration_s: float
-    sample_rate: int
-    strict_frames: bool
-
-
-@dataclass
-class DataloaderConfig:
-    num_workers: int
-
-
-@dataclass
-class SchedulerConfig:
-    patience: int
-
-
-@dataclass
-class LSTMConfig:
-    hidden_size: int
-    num_layers: int
-    bidirectional: int
-    dropout: int
-
-
-@dataclass
-class SincNetConfig:
-    stride: int
-
-
-@dataclass
-class PyanNetConfig:
-    sincnet: SincNetConfig
-    lstm: LSTMConfig
-    linear: list[int]
-    classifier: int
-
-
-@dataclass
-class WhisperidouConfig:
-    encoder: str
-    linear: list[int]
-    classifier: int
-
-
-@dataclass
-class WhisperimaxConfig:
-    encoder: str
-    lstm: LSTMConfig
-    linear: list[int]
-    classifier: int
-
-
-@dataclass
-class ModelConfig:
-    name: str
-    # is initialized as None in first pass, then as the correct model class manually (sub-optimal)
-    config: None | PyanNetConfig | WhisperidouConfig | WhisperimaxConfig
-
-
-@dataclass
-class TrainConfig:
-    model: ModelConfig
-    lr: float
-    batch_size: int
-    max_epochs: int
-    validation_metric: str
-    profiler: str | None
-
-    dataloader: DataloaderConfig
-
-    scheduler: SchedulerConfig
-
-
-@dataclass
-class Config:
-    wandb: WandbConfig
-    data: DataConfig
-    audio_config: AudioConfig
-    train: TrainConfig
-
+class BaseConfig:
     def as_dict(self) -> dict:
         """Returns the dict representation of the current instance of a configuration `Config`.
 
@@ -123,6 +31,114 @@ class Config:
                 yaml.dump(asdict(self), f, default_flow_style=False, sort_keys=False)
         except IOError as e:
             raise IOError(f"Failed to write configuration to {file_path}: {e}")
+
+
+@dataclass
+class WandbConfig:
+    log: bool
+    project: str
+    name: str
+
+
+@dataclass
+class DataConfig:
+    dataset_path: str
+    classes: list[str]
+
+
+@dataclass
+class AudioConfig:
+    chunk_duration_s: float
+    sample_rate: int
+    strict_frames: bool
+
+    @property
+    def chunk_duration_f(self) -> int:
+        """Returns the amount of frames in a chunk of duration `chunk_duration_s`."""
+        # seconds_to_frames
+        return int(self.chunk_duration_s * self.sample_rate)
+
+
+@dataclass
+class DataloaderConfig:
+    num_workers: int
+
+
+@dataclass
+class SchedulerConfig:
+    patience: int
+
+
+@dataclass
+class LSTMConfig(BaseConfig):
+    hidden_size: int
+    num_layers: int
+    bidirectional: int
+    dropout: int
+
+
+@dataclass
+class SincNetConfig(BaseConfig):
+    stride: int
+
+
+@dataclass
+class PyanNetConfig(BaseConfig):
+    sincnet: SincNetConfig
+    lstm: LSTMConfig
+    linear: list[int]
+    classifier: int
+
+
+@dataclass
+class PyanNetSlimConfig(BaseConfig):
+    sincnet: SincNetConfig
+    linear: list[int]
+    classifier: int
+
+
+@dataclass
+class WhisperidouConfig(BaseConfig):
+    encoder: str
+    linear: list[int]
+    classifier: int
+
+
+@dataclass
+class WhisperimaxConfig(BaseConfig):
+    encoder: str
+    lstm: LSTMConfig
+    linear: list[int]
+    classifier: int
+
+
+@dataclass
+class ModelConfig(BaseConfig):
+    name: str
+    # is initialized as None in first pass, then as the correct model class manually (sub-optimal)
+    config: None | PyanNetConfig | WhisperidouConfig | WhisperimaxConfig
+
+
+@dataclass
+class TrainConfig:
+    model: ModelConfig
+    lr: float
+    batch_size: int
+    max_epochs: int
+    validation_metric: str
+    profiler: str | None
+
+    dataloader: DataloaderConfig
+
+    scheduler: SchedulerConfig
+
+
+@dataclass
+class Config(BaseConfig):
+    wandb: WandbConfig
+    data: DataConfig
+    audio_config: AudioConfig
+    train: TrainConfig
 
 
 T = TypeVar("T")
@@ -185,13 +201,15 @@ def load_config(
 
     # Convert string path to Path object
     config_path = Path(config_path)
-
+    shoehorn = False
     # Load YAML file
     try:
         with open(config_path, "r") as f:
             config_data = yaml.safe_load(f)
         # NOTE - dummy patch to avoid adding `config: null` in `train.model`
-        config_data["train"]["model"]["config"] = None
+        if "config" not in config_data["train"]["model"]:
+            shoehorn = True
+            config_data["train"]["model"]["config"] = None
     except FileNotFoundError:
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
     except yaml.YAMLError as e:
@@ -203,18 +221,20 @@ def load_config(
     config: Config = create_dataclass_instance(config_class, config_data)
 
     # NOTE Manually shoehorn ModelConfig as config.train.model.config
-    model_config_class = {
-        "pyannet": PyanNetConfig,
-        "whisperidou": WhisperidouConfig,
-        "whisperimax": WhisperimaxConfig,
-    }
-    if model_config_path is None:
-        model_config_path = f"src/segma/config/{config.train.model.name}.yml"
+    if shoehorn:
+        model_config_class = {
+            "pyannet": PyanNetConfig,
+            "pyannet_slim": PyanNetSlimConfig,
+            "whisperidou": WhisperidouConfig,
+            "whisperimax": WhisperimaxConfig,
+        }
+        if model_config_path is None:
+            model_config_path = f"src/segma/config/{config.train.model.name}.yml"
 
-    with open(model_config_path, "r") as f:
-        model_config_data = yaml.safe_load(f)
+        with open(model_config_path, "r") as f:
+            model_config_data = yaml.safe_load(f)
 
-    config.train.model.config = create_dataclass_instance(
-        model_config_class[config.train.model.name], model_config_data
-    )
+        config.train.model.config = create_dataclass_instance(
+            model_config_class[config.train.model.name], model_config_data
+        )
     return config

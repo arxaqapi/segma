@@ -83,6 +83,7 @@ class Whisperidou(BaseSegmentationModel):
         super().__init__(
             label_encoder=label_encoder, config=config, weight_loss=weight_loss
         )
+        self.save_hyperparameters(self.config.train.model.config.as_dict())
 
         self.feature_extractor = WhisperFeatureExtractor()
 
@@ -127,6 +128,7 @@ class WhisperiMax(BaseSegmentationModel):
         super().__init__(
             label_encoder=label_encoder, config=config, weight_loss=weight_loss
         )
+        self.save_hyperparameters(self.config.train.model.config.as_dict())
 
         self.feature_extractor = WhisperFeatureExtractor()
 

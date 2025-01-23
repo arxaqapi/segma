@@ -186,7 +186,8 @@ def sliding_prediction(
             for pred, (w_start, w_end) in zip(predictions, reference_windows):
                 offset = start_i + batch_i * chunck_size_f
                 frame_start = w_start + offset
-                frame_end = w_end + offset
+                # FIXME - Intervals needs to be fixed
+                frame_end = w_end + offset + 1
                 # NOTE - skip padded section
                 if n_frames_to_pad > 0 and frame_start > (end_i - n_frames_to_pad):
                     break

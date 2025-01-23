@@ -123,7 +123,7 @@ class Whisperidou(BaseSegmentationModel):
 
 class WhisperiMax(BaseSegmentationModel):
     def __init__(
-        self, label_encoder: LabelEncoder, config: Config, weight_loss: bool
+        self, label_encoder: LabelEncoder, config: Config, weight_loss: bool = False
     ) -> None:
         super().__init__(
             label_encoder=label_encoder, config=config, weight_loss=weight_loss
@@ -139,10 +139,7 @@ class WhisperiMax(BaseSegmentationModel):
 
         self.lstm = nn.LSTM(
             input_size=self.w_encoder.config.d_model,
-            hidden_size=128,
-            num_layers=4,
-            bidirectional=True,
-            dropout=0.5,
+            **self.config.train.model.config.lstm.as_dict(),
         )
 
         lstm_out_features: int = self.lstm.hidden_size * 2

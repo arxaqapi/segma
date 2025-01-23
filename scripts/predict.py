@@ -60,7 +60,7 @@ if __name__ == "__main__":
         checkpoint_path=args.ckpt, label_encoder=l_encoder, config=cfg
     )
 
-    model.to(torch.device("mps"))
+    model.to("mps" if torch.backends.mps.is_available() else "cuda")
 
     # NOTE if args.uris: path is known
     if args.uris:

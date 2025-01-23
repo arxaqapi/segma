@@ -177,3 +177,15 @@ class WhisperiMax(BaseSegmentationModel):
         return self.feature_extractor(
             audio_t, return_tensors="pt", sampling_rate=16_000
         )["input_features"]
+
+
+class SurgicalWhisper(BaseSegmentationModel):
+    def __init__(self, label_encoder, config, weight_loss = False):
+        super().__init__(label_encoder, config, weight_loss)
+        raise NotImplementedError
+
+
+class HydraWhisper(BaseSegmentationModel):
+    def __init__(self, label_encoder, config, weight_loss = False):
+        super().__init__(label_encoder, config, weight_loss)
+        raise NotImplementedError

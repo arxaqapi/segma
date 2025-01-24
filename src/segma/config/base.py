@@ -34,20 +34,20 @@ class BaseConfig:
 
 
 @dataclass
-class WandbConfig:
+class WandbConfig(BaseConfig):
     log: bool
     project: str
     name: str
 
 
 @dataclass
-class DataConfig:
+class DataConfig(BaseConfig):
     dataset_path: str
     classes: list[str]
 
 
 @dataclass
-class AudioConfig:
+class AudioConfig(BaseConfig):
     chunk_duration_s: float
     sample_rate: int
     strict_frames: bool
@@ -60,12 +60,12 @@ class AudioConfig:
 
 
 @dataclass
-class DataloaderConfig:
+class DataloaderConfig(BaseConfig):
     num_workers: int
 
 
 @dataclass
-class SchedulerConfig:
+class SchedulerConfig(BaseConfig):
     patience: int
 
 
@@ -120,7 +120,7 @@ class ModelConfig(BaseConfig):
 
 
 @dataclass
-class TrainConfig:
+class TrainConfig(BaseConfig):
     model: ModelConfig
     lr: float
     batch_size: int
@@ -220,14 +220,14 @@ def load_config(
     # Create main Config instance
     config: Config = create_dataclass_instance(config_class, config_data)
 
+    model_config_class = {
+        "pyannet": PyanNetConfig,
+        "pyannet_slim": PyanNetSlimConfig,
+        "whisperidou": WhisperidouConfig,
+        "whisperimax": WhisperimaxConfig,
+    }
     # NOTE Manually shoehorn ModelConfig as config.train.model.config
     if shoehorn:
-        model_config_class = {
-            "pyannet": PyanNetConfig,
-            "pyannet_slim": PyanNetSlimConfig,
-            "whisperidou": WhisperidouConfig,
-            "whisperimax": WhisperimaxConfig,
-        }
         if model_config_path is None:
             model_config_path = f"src/segma/config/{config.train.model.name}.yml"
 
@@ -236,5 +236,10 @@ def load_config(
 
         config.train.model.config = create_dataclass_instance(
             model_config_class[config.train.model.name], model_config_data
+        )
+    # FIXME - why ?
+    if isinstance(config.train.model.config, dict):
+        config.train.model.config = create_dataclass_instance(
+            model_config_class[config.train.model.name], config.train.model.config
         )
     return config

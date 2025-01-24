@@ -180,12 +180,12 @@ class WhisperiMax(BaseSegmentationModel):
 
 
 class SurgicalWhisper(BaseSegmentationModel):
-    def __init__(self, label_encoder, config, weight_loss = False):
+    def __init__(self, label_encoder, config, weight_loss=False):
         super().__init__(label_encoder, config, weight_loss)
         raise NotImplementedError
 
 
 class HydraWhisper(BaseSegmentationModel):
-    def __init__(self, label_encoder, config, weight_loss = False):
+    def __init__(self, label_encoder, config, weight_loss=False):
         super().__init__(label_encoder, config, weight_loss)
         raise NotImplementedError

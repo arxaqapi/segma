@@ -178,9 +178,9 @@ def sliding_prediction(
         model.eval()
         with torch.no_grad():
             output_t = model(
-                batch_t.device("mps")
-                if torch.backends.mps.is_available()
-                else torch.cuda()
+                batch_t.to(
+                    torch.device("mps" if torch.backends.mps.is_available() else "cuda")
+                )
             )
 
         # NOTE - using windows of size 20ms in model output

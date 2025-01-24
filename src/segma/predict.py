@@ -132,8 +132,9 @@ def sliding_prediction(
 
     max_meta_batches = ceil(number_frames / meta_b_size)
     # NOTE - for each meta_batch pass 32 batches through the model
-
-    reference_windows = gen_bounds(max_value=chunck_size_f)[
+    reference_windows = gen_bounds(
+        max_value=chunck_size_f, clip_values=(0, chunck_size_f)
+    )[
         : model.conv_settings.n_windows(
             chunk_duration_f=config.audio_config.chunk_duration_f,
             strict=config.audio_config.strict_frames,

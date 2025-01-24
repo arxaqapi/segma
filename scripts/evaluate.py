@@ -49,10 +49,10 @@ def eval_model_output(
         scores_output (Path, optional): Output Path of the csv file containg the scores. Defaults to Path("fscore.csv").
     """
 
-    if not rttm_true_p.exists():
-        raise FileNotFoundError(f"Path '{rttm_true_p=}' not found")
-    if not rttm_pred_p.exists():
-        raise FileNotFoundError(f"Path '{rttm_pred_p=}' not found")
+    if not rttm_true_p.exists() and not rttm_true_p.is_dir():
+        raise FileNotFoundError(f"Folder Path '{rttm_true_p=}' not found.")
+    if not rttm_pred_p.exists() and not rttm_pred_p.is_dir():
+        raise FileNotFoundError(f"Folder Path '{rttm_pred_p=}' not found.")
 
     metric = MacroAverageFMeasure(classes=list(label_encoder.base_labels))
 
@@ -68,6 +68,7 @@ def eval_model_output(
         metric(
             reference=uri_to_rttm_true[uri],
             hypothesis=uri_to_rttm_preds[uri],
+            # NOTE - UEM is inferred
             detailed=True,
         )
 

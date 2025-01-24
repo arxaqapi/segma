@@ -12,6 +12,6 @@
 # load python virtualenv
 source .venv/bin/activate
 module load audio-tools
+module load uv
 
-srun python scripts/train.py --wandb --model whisperidou --tags no_speech whisperidou --dataset baby_train
-# srun python scripts/train.py --wandb --model whisperimax --tags no_speech whisperimax --dataset baby_train
+uv run scripts/train.py --config config.yml --tags whisperidou, 4s

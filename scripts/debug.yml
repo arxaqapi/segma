@@ -21,6 +21,7 @@ audio_config:
 train:
   model: 
     name: whisperidou
+    # name: surgical_whisper
     # name: pyannet
     # name: pyannet_slim
   lr: 0.001

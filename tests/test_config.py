@@ -78,3 +78,18 @@ def test_Config_save_load():
     assert cfg.as_dict() == cfg_saved.as_dict()
 
     temp_p.unlink()
+
+
+def test_Config_SurgicalWhisperConfig():
+    cfg = load_config(
+        config_path="tests/sample/test_config_surgical_whisper.yml",
+    )
+
+    assert cfg.train.model.name == "surgical_whisper"
+
+    assert hasattr(cfg.train.model.config, "encoder")
+    assert hasattr(cfg.train.model.config, "encoder_layers")
+    assert hasattr(cfg.train.model.config, "reduction")
+    assert hasattr(cfg.train.model.config, "linear")
+    assert hasattr(cfg.train.model.config, "classifier")
+

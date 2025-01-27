@@ -1,6 +1,6 @@
 from dataclasses import asdict, dataclass, fields, is_dataclass
 from pathlib import Path
-from typing import Any, Type, TypeVar, Union, get_type_hints
+from typing import Any, Literal, Type, TypeVar, Union, get_type_hints
 
 import yaml
 
@@ -113,10 +113,28 @@ class WhisperimaxConfig(BaseConfig):
 
 
 @dataclass
+class SurgicalWhisperConfig(BaseConfig):
+    encoder: str
+    encoder_layers: list[int]
+    reduction: Literal["average", "weighted"]
+    linear: list[int]
+    classifier: int
+
+
+type ModelConfig_T = (
+    PyanNetConfig
+    | PyanNetSlimConfig
+    | WhisperidouConfig
+    | WhisperimaxConfig
+    | SurgicalWhisperConfig
+)
+
+
+@dataclass
 class ModelConfig(BaseConfig):
     name: str
     # is initialized as None in first pass, then as the correct model class manually (sub-optimal)
-    config: None | PyanNetConfig | WhisperidouConfig | WhisperimaxConfig
+    config: None | ModelConfig_T
 
 
 @dataclass
@@ -225,6 +243,8 @@ def load_config(
         "pyannet_slim": PyanNetSlimConfig,
         "whisperidou": WhisperidouConfig,
         "whisperimax": WhisperimaxConfig,
+        "surgical_whisper": SurgicalWhisperConfig,
+        "surgicalwhisper": SurgicalWhisperConfig,
     }
     # NOTE Manually shoehorn ModelConfig as config.train.model.config
     if shoehorn:

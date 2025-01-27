@@ -78,14 +78,18 @@ def test_PyanNet_forward():
     # 115
     # print(model.conv_settings.n_windows())
 
-    assert out.shape == (1, model.conv_settings.n_windows(), len(label_encoder.labels))
+    assert out.shape == (
+        1,
+        model.conv_settings.n_windows(32_000),
+        len(label_encoder.labels),
+    )
     assert (1, 115, 8) == (
         1,
-        model.conv_settings.n_windows(),
+        model.conv_settings.n_windows(32_000),
         len(label_encoder.labels),
     )
     assert (1, 118, 8) == (
         1,
-        model.conv_settings.n_windows(strict=False),
+        model.conv_settings.n_windows(32_000, strict=False),
         len(label_encoder.labels),
     )

@@ -16,7 +16,8 @@ data:
 audio_config:
   chunk_duration_s: 4.0
   sample_rate: 16_000
-  strict_frames: true
+  # True if pyannet, False if Whisper
+  strict_frames: false
 
 train:
   model: 

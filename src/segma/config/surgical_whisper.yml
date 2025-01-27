@@ -1,0 +1,8 @@
+encoder: whisper_tiny_encoder
+encoder_layers: []
+reduction: weighted
+
+linear:
+  - 256
+classifier: 256
+

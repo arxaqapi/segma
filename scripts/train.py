@@ -10,6 +10,7 @@ from lightning.pytorch.callbacks import (
     LearningRateMonitor,
     ModelCheckpoint,
 )
+from lightning.pytorch.callbacks.progress.tqdm_progress import TQDMProgressBar
 from lightning.pytorch.loggers import CSVLogger
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -166,7 +167,12 @@ if __name__ == "__main__":
         devices=1,
         max_epochs=cfg.train.max_epochs,
         logger=logger,
-        callbacks=[model_checkpoint, early_stopping, LearningRateMonitor()],
+        callbacks=[
+            model_checkpoint,
+            early_stopping,
+            LearningRateMonitor(),
+            TQDMProgressBar(1000 if not "debug" in cfg.data.dataset_path else 1),
+        ],
         # profiler="advanced"
         profiler=cfg.train.profiler,
     )

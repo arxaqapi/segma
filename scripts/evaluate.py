@@ -106,7 +106,7 @@ if __name__ == "__main__":
         "-c",
         "--config",
         type=str,
-        default="src/segma/config/default.yml",
+        required=True,
         help="Config file to be loaded and used for the training.",
     )
 

@@ -45,6 +45,9 @@ def prediction(audio_path: Path, model: BaseSegmentationModel, output_p: Path):
         model (BaseSegmentationModel): Trained model used to perform inference.
         output_p (Path): Output folder that will contain the segmentation files.
     """
+    raise NotImplementedError(
+        "This method is no longer to be used, please refer to `sliding_prediction` instead."
+    )
     assert audio_path.exists()
 
     audio_t, _sr = torchaudio.load(audio_path.resolve())

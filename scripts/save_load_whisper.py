@@ -2,7 +2,6 @@ import argparse
 
 import torch
 from transformers import WhisperModel
-from transformers.models.whisper.convert_openai_to_hf import _MODELS
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -16,8 +15,15 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--model",
-        choices=list(_MODELS.keys()),
-        # ("tiny", "base", "small", "medium", "large", "large-v2", "large-v3"),
+        choices=(
+            "tiny",
+            "base",
+            "small",
+            "medium",
+            "large",
+            "large-v2",
+            "large-v3",
+        ),
         default="tiny",
         type=str,
         help="Select the model.",

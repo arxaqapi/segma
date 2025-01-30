@@ -40,4 +40,4 @@ if __name__ == "__main__":
         "openai/whisper-" + args.model,
         torch_dtype=t_type,
     )
-    model.encoder.save_pretrained(f"whisper_{args.model.replace("-", "_")}_encoder")
+    model.encoder.save_pretrained(f"whisper_{args.model.replace('-', '_')}_encoder")

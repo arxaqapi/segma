@@ -4,7 +4,7 @@ logs/
 wandb/
 notebooks/
 /models/
-whisper_tiny_encoder/
+whisper_*_encoder/
 *.tar.gz
 scripts/jz
 

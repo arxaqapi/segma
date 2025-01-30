@@ -3,6 +3,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from types import MethodType
+from typing import Literal
 
 import lightning as pl
 from lightning.pytorch.callbacks import (
@@ -18,6 +19,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from segma.config import Config, load_config
 from segma.dataloader import SegmentationDataLoader
 from segma.models import (
+    HydraWhisper,
     Models,
     PyanNet,
     PyanNetSlim,
@@ -25,10 +27,10 @@ from segma.models import (
     Whisperidou,
     WhisperiMax,
 )
-from segma.utils.encoders import PowersetMultiLabelEncoder
+from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
 
 
-def get_metric(metric: str) -> tuple[str, str]:
+def get_metric(metric: str) -> tuple[Literal["min", "max"], str]:
     if metric == "loss":
         return "min", "val/loss"
     elif metric == "auroc":
@@ -64,11 +66,17 @@ if __name__ == "__main__":
     if not chkp_path.exists():
         chkp_path.mkdir()
 
-    l_encoder = PowersetMultiLabelEncoder(cfg.data.classes)
+    l_encoder = MultiLabelEncoder(cfg.data.classes)
+    # l_encoder = PowersetMultiLabelEncoder(cfg.data.classes)
 
-    model: Whisperidou | WhisperiMax | PyanNet | PyanNetSlim | SurgicalWhisper = Models[
-        cfg.train.model.name
-    ](l_encoder, cfg)
+    model: (
+        Whisperidou
+        | WhisperiMax
+        | PyanNet
+        | PyanNetSlim
+        | SurgicalWhisper
+        | HydraWhisper
+    ) = Models[cfg.train.model.name](l_encoder, cfg)
 
     mode, monitor = get_metric(cfg.train.validation_metric)
 
@@ -171,7 +179,7 @@ if __name__ == "__main__":
             model_checkpoint,
             early_stopping,
             LearningRateMonitor(),
-            TQDMProgressBar(1000 if not "debug" in cfg.data.dataset_path else 1),
+            TQDMProgressBar(1000 if "debug" not in cfg.data.dataset_path else 1),
         ],
         # profiler="advanced"
         profiler=cfg.train.profiler,

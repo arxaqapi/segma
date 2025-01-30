@@ -15,7 +15,7 @@ from torchmetrics.functional.classification import (
 )
 
 from segma.config.base import Config
-from segma.utils.encoders import LabelEncoder, PowersetMultiLabelEncoder
+from segma.utils.encoders import LabelEncoder
 from segma.utils.receptive_fields import rf_center_i, rf_size
 
 
@@ -71,10 +71,6 @@ class BaseSegmentationModel(pl.LightningModule):
         self, label_encoder: LabelEncoder, config: Config, weight_loss: bool
     ) -> None:
         super().__init__()
-        if not isinstance(label_encoder, PowersetMultiLabelEncoder):
-            raise ValueError(
-                "Only PowersetMultiLabelEncoder is accepted at the moment."
-            )
         self.label_encoder = label_encoder
         self.config = config
         self.weights = (
@@ -221,7 +217,7 @@ class BaseSegmentationModel(pl.LightningModule):
             roc_ax.plot(
                 fpr.cpu(),
                 tpr.cpu(),
-                label=f"{labels_str} - AUC={round(float(auroc_per_class[ self.label_encoder.transform(label) ]), 4)}",
+                label=f"{labels_str} - AUC={round(float(auroc_per_class[self.label_encoder.transform(label)]), 4)}",
             )
         roc_ax.plot([0, 1], [0, 1], "k--", label="Random classifier: AUC=0.5")
         roc_ax.set_xlabel("False Positive Rate (Sensitivity )")

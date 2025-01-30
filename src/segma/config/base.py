@@ -121,12 +121,20 @@ class SurgicalWhisperConfig(BaseConfig):
     classifier: int
 
 
+@dataclass
+class HydraWhisperConfig(BaseConfig):
+    encoder: str
+    lstm: LSTMConfig
+    classifier: int
+
+
 type ModelConfig_T = (
     PyanNetConfig
     | PyanNetSlimConfig
     | WhisperidouConfig
     | WhisperimaxConfig
     | SurgicalWhisperConfig
+    | HydraWhisperConfig
 )
 
 
@@ -245,6 +253,7 @@ def load_config(
         "whisperimax": WhisperimaxConfig,
         "surgical_whisper": SurgicalWhisperConfig,
         "surgicalwhisper": SurgicalWhisperConfig,
+        "hydra_whisper": HydraWhisperConfig,
     }
     # NOTE Manually shoehorn ModelConfig as config.train.model.config
     if shoehorn:

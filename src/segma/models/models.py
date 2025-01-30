@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import torch
 import torch.nn as nn
 from transformers import WhisperFeatureExtractor
@@ -9,6 +7,8 @@ from transformers.models.whisper.modeling_whisper import WhisperEncoder
 from segma.config.base import Config
 from segma.models.base import BaseSegmentationModel, ConvolutionSettings
 from segma.utils.encoders import LabelEncoder
+
+from .utils import load_whisper
 
 
 class Miniseg(BaseSegmentationModel):
@@ -181,13 +181,6 @@ class WhisperiMax(BaseSegmentationModel):
         )["input_features"]
 
 
-def load_whisper(path: Path | str):
-    feature_extractor = WhisperFeatureExtractor()
-    w_encoder = WhisperEncoder.from_pretrained(path, local_files_only=True)
-    w_encoder._freeze_parameters()
-    return feature_extractor, w_encoder
-
-
 class SurgicalWhisper(BaseSegmentationModel):
     def __init__(
         self, label_encoder: LabelEncoder, config: Config, weight_loss: bool = False
@@ -277,9 +270,3 @@ class SurgicalWhisper(BaseSegmentationModel):
         return self.feature_extractor(
             audio_t, return_tensors="pt", sampling_rate=16_000
         )["input_features"]
-
-
-class HydraWhisper(BaseSegmentationModel):
-    def __init__(self, label_encoder, config, weight_loss=False):
-        super().__init__(label_encoder, config, weight_loss)
-        raise NotImplementedError

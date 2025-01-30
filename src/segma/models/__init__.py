@@ -1,3 +1,4 @@
+from segma.models.hydra import HydraWhisper
 from segma.models.models import SurgicalWhisper, Whisperidou, WhisperiMax
 from segma.models.pyannet import PyanNet, PyanNetSlim
 
@@ -16,6 +17,8 @@ Models = {
     "PyanNet_slim": PyanNetSlim,
     "surgical_whisper": SurgicalWhisper,
     "surgicalwhisper": SurgicalWhisper,
+    "hydra_whisper": HydraWhisper,
+    "HydraWhisper": HydraWhisper,
 }
 
 
@@ -25,6 +28,7 @@ __all__ = [
     "PyanNet",
     "PyanNetSlim",
     "SurgicalWhisper",
+    "HydraWhisper",
     "Models",
     # "ConvolutionSettings",
 ]

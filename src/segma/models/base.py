@@ -7,8 +7,6 @@ import matplotlib.pyplot as plt
 import torch
 import wandb
 from torchmetrics.functional.classification import (
-    # auroc,
-    # multiclass_accuracy,
     multiclass_auroc,
     multiclass_f1_score,
     multiclass_roc,

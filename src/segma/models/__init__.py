@@ -1,11 +1,8 @@
 from segma.models.hydra import HydraWhisper
-from segma.models.models import SurgicalWhisper, Whisperidou, WhisperiMax
 from segma.models.pyannet import PyanNet, PyanNetSlim
+from segma.models.surgical import SurgicalWhisper
+from segma.models.whiser_based import Whisperidou, WhisperiMax
 
-# from segma.models.utils import ConvolutionSettings
-
-
-# improve with str.lowercase
 Models = {
     "Whisperidou": Whisperidou,
     "whisperidou": Whisperidou,
@@ -30,5 +27,4 @@ __all__ = [
     "SurgicalWhisper",
     "HydraWhisper",
     "Models",
-    # "ConvolutionSettings",
 ]

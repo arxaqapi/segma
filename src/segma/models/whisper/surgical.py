@@ -88,7 +88,7 @@ class SurgicalWhisper(BaseSegmentationModel):
         logits = self.classifier(weighted_t)
 
         truncation_i = self.conv_settings.n_windows(
-            self.config.audio_config.chunk_duration_f, strict=False
+            self.config.audio.chunk_duration_f, strict=False
         )
         logits = logits[:, :truncation_i, :]
         return torch.nn.functional.softmax(logits, dim=-1)

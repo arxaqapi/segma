@@ -151,6 +151,7 @@ class TrainConfig(BaseConfig):
     batch_size: int
     max_epochs: int
     validation_metric: str
+    extra_val_metrics: list[str]
     profiler: str | None
 
     dataloader: DataloaderConfig
@@ -162,7 +163,7 @@ class TrainConfig(BaseConfig):
 class Config(BaseConfig):
     wandb: WandbConfig
     data: DataConfig
-    audio_config: AudioConfig
+    audio: AudioConfig
     model: ModelConfig
     train: TrainConfig
 

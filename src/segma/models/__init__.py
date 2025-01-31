@@ -1,7 +1,9 @@
-from segma.models.hydra import HydraWhisper
 from segma.models.pyannet import PyanNet, PyanNetSlim
-from segma.models.surgical import SurgicalWhisper
-from segma.models.whiser_based import Whisperidou, WhisperiMax
+
+from .whisper.hydra import HydraWhisper
+from .whisper.surgical import SurgicalWhisper
+from .whisper.whiserimax import WhisperiMax
+from .whisper.whisperidou import Whisperidou
 
 Models = {
     "whisperidou": Whisperidou,

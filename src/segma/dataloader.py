@@ -148,13 +148,13 @@ class SegmentationDataLoader(pl.LightningDataModule):
                                 int(
                                     milliseconds_to_frames(
                                         annot.start_time_ms,
-                                        sample_rate=config.audio_config.sample_rate,
+                                        sample_rate=config.audio.sample_rate,
                                     )
                                 ),
                                 int(
                                     milliseconds_to_frames(
                                         annot.end_time_ms,
-                                        sample_rate=config.audio_config.sample_rate,
+                                        sample_rate=config.audio.sample_rate,
                                     )
                                 ),
                                 # self.label_encoder(annot.label),
@@ -176,11 +176,11 @@ class SegmentationDataLoader(pl.LightningDataModule):
         # TODO - raise warnings
         if (
             frames_to_seconds(num_frames, sample_rate)
-            <= self.config.audio_config.chunk_duration_s
+            <= self.config.audio.chunk_duration_s
         ):
             return False
 
-        if sample_rate != self.config.audio_config.sample_rate:
+        if sample_rate != self.config.audio.sample_rate:
             return False
 
         for annot in annotations:
@@ -255,11 +255,11 @@ class AudioSegmentationDataset(IterableDataset):
 
         self.windows = generate_frames(
             conv_settings=self.conv_settings,
-            sample_rate=config.audio_config.sample_rate,
-            chunk_duration_s=config.audio_config.chunk_duration_s,
+            sample_rate=config.audio.sample_rate,
+            chunk_duration_s=config.audio.chunk_duration_s,
             # TODO - config
             # strict_frames: True is pyannet - False if whisper
-            strict=config.audio_config.strict_frames,
+            strict=config.audio.strict_frames,
         )
 
         assert len(uris) == durations.shape[0]
@@ -269,9 +269,7 @@ class AudioSegmentationDataset(IterableDataset):
         # ensures each worker has a separate seed
         rng = np.random.default_rng(seed=w_info.seed)
 
-        durations_f = floor(
-            seconds_to_frames(self.config.audio_config.chunk_duration_s)
-        )
+        durations_f = floor(seconds_to_frames(self.config.audio.chunk_duration_s))
         while True:
             # NOTE 1. sample a file depending on its annotated or audio duration
             # audio_duration_f, annotated_duration_f
@@ -314,9 +312,9 @@ class AudioSegmentationDataset(IterableDataset):
 
     def load_audio(self, audio_file_p: Path, start_f: int, duration_f: int):
         """loads only wanted segment from audio and downsamples it."""
-        if duration_f != self.config.audio_config.chunk_duration_s * 16_000:
+        if duration_f != self.config.audio.chunk_duration_s * 16_000:
             raise ValueError(
-                f"Error in `AudioSegmentationDataset.load_audio()`: `{duration_f=}` != {self.config.audio_config.chunk_duration_s * 16_000=}"
+                f"Error in `AudioSegmentationDataset.load_audio()`: `{duration_f=}` != {self.config.audio.chunk_duration_s * 16_000=}"
             )
         audio_t, _sr = torchaudio.load(
             audio_file_p.resolve(), frame_offset=start_f, num_frames=duration_f
@@ -337,10 +335,7 @@ class AudioSegmentationDataset(IterableDataset):
         # REVIEW - file error with iterable dataset len that has to be an integer
         return int(
             max(
-                ceil(
-                    total_annotated_duration_s
-                    / self.config.audio_config.chunk_duration_s
-                ),
+                ceil(total_annotated_duration_s / self.config.audio.chunk_duration_s),
                 self.config.train.batch_size,
             )
         )

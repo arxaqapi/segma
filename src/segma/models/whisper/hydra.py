@@ -73,7 +73,7 @@ class HydraWhisper(BaseSegmentationModel):
         # Since whisper expects 30s audio segments as input (480_000 frames)
         # we have to truncate the output to only cover 2s of audio
         truncation_i = self.conv_settings.n_windows(
-            self.config.audio_config.chunk_duration_f, strict=False
+            self.config.audio.chunk_duration_f, strict=False
         )
         enc_x = enc_x[:, :truncation_i, :]
 
@@ -137,45 +137,59 @@ class HydraWhisper(BaseSegmentationModel):
         y_preds = {k: y_pred.view(-1) for k, y_pred in y_pred_heads.items()}
 
         # NOTE - loss computation
-        head_losses = {
-            k: torch.nn.functional.binary_cross_entropy_with_logits(
-                input=y_pred, target=y_target[..., i], weight=self.weights
-            )
-            for i, (k, y_pred) in enumerate(y_preds.items())
-        }
+        if (
+            self.config.train.validation_metric == "loss"
+            or "loss" in self.config.train.extra_val_metrics
+        ):
+            head_losses = {
+                k: torch.nn.functional.binary_cross_entropy_with_logits(
+                    input=y_pred, target=y_target[..., i], weight=self.weights
+                )
+                for i, (k, y_pred) in enumerate(y_preds.items())
+            }
 
-        loss = torch.stack(list(head_losses.values())).sum()
-        self.log(
-            "val/loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
-        )
-        for head_name, head_loss in head_losses.items():
+            loss = torch.stack(list(head_losses.values())).sum()
             self.log(
-                f"val/loss_{head_name.removeprefix('linear_head_')}",
-                head_loss,
-                on_step=True,
-                on_epoch=True,
-                prog_bar=False,
-                logger=True,
-            )
-
-        # NOTE - f1 score
-        head_f1_scores = {
-            k: binary_f1_score(
-                preds=y_pred,
-                target=y_target[..., i],
-                threshold=0.5,
-            )
-            for i, (k, y_pred) in enumerate(y_preds.items())
-        }
-        for head_name, head_f1_score in head_f1_scores.items():
-            self.log(
-                f"val/f1_{head_name.removeprefix('linear_head_')}",
-                head_f1_score,
+                "val/loss",
+                loss,
                 on_step=True,
                 on_epoch=True,
                 prog_bar=True,
                 logger=True,
             )
+            for head_name, head_loss in head_losses.items():
+                self.log(
+                    f"val/loss_{head_name.removeprefix('linear_head_')}",
+                    head_loss,
+                    on_step=True,
+                    on_epoch=True,
+                    prog_bar=False,
+                    logger=True,
+                )
+
+        # NOTE - f1 score
+        if (
+            self.config.train.validation_metric == "f1_score"
+            or "f1_score" in self.config.train.extra_val_metrics
+        ):
+            head_f1_scores = {
+                k: binary_f1_score(
+                    preds=y_pred,
+                    target=y_target[..., i],
+                    threshold=0.5,
+                )
+                for i, (k, y_pred) in enumerate(y_preds.items())
+            }
+            for head_name, head_f1_score in head_f1_scores.items():
+                self.log(
+                    f"val/f1_{head_name.removeprefix('linear_head_')}",
+                    head_f1_score,
+                    on_step=True,
+                    on_epoch=True,
+                    prog_bar=True,
+                    logger=True,
+                )
+            # TODO - total f1_score using a merger of TP/FP ...
 
         ####################################################################################
         ####################################################################################

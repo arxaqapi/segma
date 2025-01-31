@@ -119,122 +119,141 @@ class BaseSegmentationModel(pl.LightningModule):
                 f"y_target and y_predict shapes do not match, got shapes: {y_target.shape=} {y_pred.shape=}"
             )
 
-        loss = torch.nn.functional.cross_entropy(
-            input=y_pred, target=y_target, weight=self.weights
-        )
-        self.log(
-            "val/loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
-        )
-
         # NOTE - split loss for the first n elements
         n_single = len(
             list(filter(lambda e: e < 2, map(len, self.label_encoder.labels)))
         )
-
-        # create a weight vector of size len(self.label_encoder) and put the first n elements to 1.
-        weights = torch.zeros(size=(len(self.label_encoder),)).to(self.device)
-        weights[:n_single] = 1.0
-        with torch.no_grad():
-            partial_loss = torch.nn.functional.cross_entropy(
-                input=y_pred, target=y_target, weight=weights
+        if (
+            self.config.train.validation_metric == "loss"
+            or "loss" in self.config.train.extra_val_metrics
+        ):
+            loss = torch.nn.functional.cross_entropy(
+                input=y_pred, target=y_target, weight=self.weights
             )
-        self.log(
-            "val/partial_loss",
-            partial_loss,
-            on_step=True,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-        )
-
-        f1_score_p_class = multiclass_f1_score(
-            preds=y_pred.argmax(-1),
-            target=y_target.argmax(-1),
-            num_classes=len(self.label_encoder),
-            average=None,
-            zero_division=0,
-        )
-        # macro average
-        self.log(
-            "val/f1_score",
-            f1_score_p_class.mean(),
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-        )
-        self.log(
-            "val/partial_f1_score",
-            f1_score_p_class[:n_single].mean(),
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-        )
-        for i, c_f1_score in enumerate(f1_score_p_class):
-            c_f1_score = round(c_f1_score.item(), 6)
-            label_name = " & ".join(self.label_encoder.inv_transform(i))
             self.log(
-                f"val/f1_score/{label_name}",
-                c_f1_score,
+                "val/loss",
+                loss,
+                on_step=True,
                 on_epoch=True,
                 prog_bar=True,
                 logger=True,
             )
 
-        auroc_per_class = multiclass_auroc(
-            preds=y_pred,
-            target=y_target.argmax(-1),
-            num_classes=len(self.label_encoder),
-            average="none",
-        )
-        self.log(
-            "val/auroc",
-            auroc_per_class.mean(),
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-        )
-        self.log(
-            "val/partial_auroc",
-            auroc_per_class[:n_single].mean(),
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-        )
+            # create a weight vector of size len(self.label_encoder) and put the first n elements to 1.
+            weights = torch.zeros(size=(len(self.label_encoder),)).to(self.device)
+            weights[:n_single] = 1.0
+            with torch.no_grad():
+                partial_loss = torch.nn.functional.cross_entropy(
+                    input=y_pred, target=y_target, weight=weights
+                )
+            self.log(
+                "val/partial_loss",
+                partial_loss,
+                on_step=True,
+                on_epoch=True,
+                prog_bar=True,
+                logger=True,
+            )
+
+        if (
+            self.config.train.validation_metric == "f1_score"
+            or "f1_score" in self.config.train.extra_val_metrics
+        ):
+            f1_score_p_class = multiclass_f1_score(
+                preds=y_pred.argmax(-1),
+                target=y_target.argmax(-1),
+                num_classes=len(self.label_encoder),
+                average=None,
+                zero_division=0,
+            )
+            # macro average
+            self.log(
+                "val/f1_score",
+                f1_score_p_class.mean(),
+                on_epoch=True,
+                prog_bar=True,
+                logger=True,
+            )
+            self.log(
+                "val/partial_f1_score",
+                f1_score_p_class[:n_single].mean(),
+                on_epoch=True,
+                prog_bar=True,
+                logger=True,
+            )
+            for i, c_f1_score in enumerate(f1_score_p_class):
+                c_f1_score = round(c_f1_score.item(), 6)
+                label_name = " & ".join(self.label_encoder.inv_transform(i))
+                self.log(
+                    f"val/f1_score/{label_name}",
+                    c_f1_score,
+                    on_epoch=True,
+                    prog_bar=True,
+                    logger=True,
+                )
+
+        if (
+            self.config.train.validation_metric == "auroc"
+            or "auroc" in self.config.train.extra_val_metrics
+        ):
+            auroc_per_class = multiclass_auroc(
+                preds=y_pred,
+                target=y_target.argmax(-1),
+                num_classes=len(self.label_encoder),
+                average="none",
+            )
+            self.log(
+                "val/auroc",
+                auroc_per_class.mean(),
+                on_epoch=True,
+                prog_bar=True,
+                logger=True,
+            )
+            self.log(
+                "val/partial_auroc",
+                auroc_per_class[:n_single].mean(),
+                on_epoch=True,
+                prog_bar=True,
+                logger=True,
+            )
 
         # ROC curves plotting
-        fpr_s, tpr_s, _ = multiclass_roc(
-            preds=y_pred,
-            target=y_target.argmax(-1),
-            num_classes=len(self.label_encoder),
-        )
-
-        roc_fig = plt.figure(figsize=(10, 5))
-        roc_ax = roc_fig.add_subplot()
-        for fpr, tpr, label in zip(fpr_s, tpr_s, self.label_encoder.labels):
-            labels_str = " & ".join([e[:3] for e in label]) if label != () else "None"
-            roc_ax.plot(
-                fpr.cpu(),
-                tpr.cpu(),
-                label=f"{labels_str} - AUC={round(float(auroc_per_class[self.label_encoder.transform(label)]), 4)}",
+        if "roc" in self.config.train.extra_val_metrics:
+            fpr_s, tpr_s, _ = multiclass_roc(
+                preds=y_pred,
+                target=y_target.argmax(-1),
+                num_classes=len(self.label_encoder),
             )
-        roc_ax.plot([0, 1], [0, 1], "k--", label="Random classifier: AUC=0.5")
-        roc_ax.set_xlabel("False Positive Rate (Sensitivity )")
-        roc_ax.set_ylabel("True Positive Rate")
-        roc_ax.set_title(f"ROC Curve at epoch n° {self.current_epoch}")
 
-        roc_ax.legend(
-            bbox_to_anchor=(1.04, 0.5),
-            loc="center left",
-            borderaxespad=0,
-            edgecolor="None",
-        )
-        roc_fig.tight_layout()
+            roc_fig = plt.figure(figsize=(10, 5))
+            roc_ax = roc_fig.add_subplot()
+            for fpr, tpr, label in zip(fpr_s, tpr_s, self.label_encoder.labels):
+                labels_str = (
+                    " & ".join([e[:3] for e in label]) if label != () else "None"
+                )
+                roc_ax.plot(
+                    fpr.cpu(),
+                    tpr.cpu(),
+                    label=f"{labels_str} - AUC={round(float(auroc_per_class[self.label_encoder.transform(label)]), 4)}",
+                )
+            roc_ax.plot([0, 1], [0, 1], "k--", label="Random classifier: AUC=0.5")
+            roc_ax.set_xlabel("False Positive Rate (Sensitivity )")
+            roc_ax.set_ylabel("True Positive Rate")
+            roc_ax.set_title(f"ROC Curve at epoch n° {self.current_epoch}")
 
-        try:
-            self.logger.experiment.log({"ROC_curves": wandb.Image(roc_fig)})
-        except Exception as _:
-            pass
-        plt.close(roc_fig)
+            roc_ax.legend(
+                bbox_to_anchor=(1.04, 0.5),
+                loc="center left",
+                borderaxespad=0,
+                edgecolor="None",
+            )
+            roc_fig.tight_layout()
+
+            try:
+                self.logger.experiment.log({"ROC_curves": wandb.Image(roc_fig)})
+            except Exception as _:
+                pass
+            plt.close(roc_fig)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.config.train.lr)

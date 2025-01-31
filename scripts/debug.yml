@@ -12,7 +12,7 @@ data:
     - other_child
 
 # necessary info for pred/eval
-audio_config:
+audio:
   chunk_duration_s: 2.0
   sample_rate: 16_000
   # True if pyannet, False if Whisper

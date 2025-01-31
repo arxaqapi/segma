@@ -7,7 +7,7 @@ from torchmetrics.functional.classification import multiclass_auroc, multiclass_
 
 from segma.config.base import Config
 from segma.models.base import BaseSegmentationModel, ConvolutionSettings
-from segma.utils.encoders import LabelEncoder  # PowersetMultiLabelEncoder
+from segma.utils.encoders import LabelEncoder
 
 
 class SincNet(nn.Module):
@@ -115,7 +115,7 @@ class PyanNet(BaseSegmentationModel):
         self.save_hyperparameters(self.config.model.config.as_dict())
 
         self.sincnet = SincNet(
-            sample_rate=self.config.audio_config.sample_rate, stride=sincnet.stride
+            sample_rate=self.config.audio.sample_rate, stride=sincnet.stride
         )
 
         self.lstm = nn.LSTM(
@@ -193,7 +193,7 @@ class PyanNetSlim(BaseSegmentationModel):
         self.save_hyperparameters(self.config.model.config.as_dict())
 
         self.sincnet = SincNet(
-            sample_rate=self.config.audio_config.sample_rate, stride=sincnet.stride
+            sample_rate=self.config.audio.sample_rate, stride=sincnet.stride
         )
 
         # self.linear_stack = nn.ModuleList(

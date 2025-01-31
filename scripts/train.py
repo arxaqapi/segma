@@ -28,7 +28,9 @@ from segma.models import (
     Whisperidou,
     WhisperiMax,
 )
-from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
+from segma.utils.encoders import MultiLabelEncoder
+
+# from segma.utils.encoders import PowersetMultiLabelEncoder
 
 
 def get_metric(metric: str) -> tuple[Literal["min", "max"], str]:

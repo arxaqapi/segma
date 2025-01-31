@@ -125,9 +125,7 @@ def sliding_prediction(
     """do not open audio entirely
     - perform slide-wise"""
     batch_size = 32
-    chunck_size_f = (
-        int(config.audio_config.chunk_duration_s) * config.audio_config.sample_rate
-    )
+    chunck_size_f = int(config.audio.chunk_duration_s) * config.audio.sample_rate
     meta_b_size = batch_size * chunck_size_f
 
     audio_info = torchaudio.info(audio_path.resolve())
@@ -139,8 +137,8 @@ def sliding_prediction(
         max_value=chunck_size_f, clip_values=(0, chunck_size_f)
     )[
         : model.conv_settings.n_windows(
-            chunk_duration_f=config.audio_config.chunk_duration_f,
-            strict=config.audio_config.strict_frames,
+            chunk_duration_f=config.audio.chunk_duration_f,
+            strict=config.audio.strict_frames,
         )
     ]
     # REVIEW - n_frames is too restrictive, this hackeridou is awfull

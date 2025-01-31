@@ -13,7 +13,7 @@ data:
     # - SPEECH
 
 # necessary info for pred/eval
-audio_config:
+audio:
   chunk_duration_s: 4.0
   sample_rate: 16_000
   # True if pyannet, False if Whisper

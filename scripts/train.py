@@ -6,6 +6,7 @@ from types import MethodType
 from typing import Literal
 
 import lightning as pl
+import torch
 from lightning.pytorch.callbacks import (
     EarlyStopping,
     LearningRateMonitor,
@@ -184,6 +185,14 @@ if __name__ == "__main__":
         # profiler="advanced"
         profiler=cfg.train.profiler,
     )
+
+    # https://pytorch.org/docs/main/torch.compiler_troubleshooting.html#dealing-with-recompilations
+    # https://docs.google.com/document/d/1y5CRfMLdwEoF1nTk9q8qEu1mgMUuUtvhklPKJ2emLU8/edit?tab=t.0#heading=h.t130sdb4rshr
+    if cfg.train.model.name in ("hydra_whisper", "HydraWhisper"):
+        torch._dynamo.config.accumulated_cache_size_limit = 32
+        if hasattr(torch._dynamo.config, "cache_size_limit"):
+            torch._dynamo.config.cache_size_limit = 32
+        model = torch.compile(model)
 
     print(f"[log @ {datetime.now().strftime('%Y%m%d_%H%M')}] - started training")
     trainer.fit(model, datamodule=dm)

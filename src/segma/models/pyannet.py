@@ -109,10 +109,10 @@ class PyanNet(BaseSegmentationModel):
             label_encoder=label_encoder, config=config, weight_loss=weight_loss
         )
 
-        sincnet = self.config.train.model.config.sincnet
-        lstm_c = self.config.train.model.config.lstm
+        sincnet = self.config.model.config.sincnet
+        lstm_c = self.config.model.config.lstm
 
-        self.save_hyperparameters(self.config.train.model.config.as_dict())
+        self.save_hyperparameters(self.config.model.config.as_dict())
 
         self.sincnet = SincNet(
             sample_rate=self.config.audio_config.sample_rate, stride=sincnet.stride
@@ -188,9 +188,9 @@ class PyanNetSlim(BaseSegmentationModel):
             label_encoder=label_encoder, config=config, weight_loss=weight_loss
         )
 
-        sincnet = self.config.train.model.config.sincnet
+        sincnet = self.config.model.config.sincnet
 
-        self.save_hyperparameters(self.config.train.model.config.as_dict())
+        self.save_hyperparameters(self.config.model.config.as_dict())
 
         self.sincnet = SincNet(
             sample_rate=self.config.audio_config.sample_rate, stride=sincnet.stride

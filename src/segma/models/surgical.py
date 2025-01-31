@@ -17,28 +17,28 @@ class SurgicalWhisper(BaseSegmentationModel):
 
         # NOTE - whisper encoder stack
         self.feature_extractor, self.w_encoder = load_whisper(
-            self.config.train.model.config.encoder
+            self.config.model.config.encoder
         )
 
         # NOTE - get list of encoder layers to use
         if (
-            config.train.model.config.encoder_layers is None
-            or len(config.train.model.config.encoder_layers) == 0
+            config.model.config.encoder_layers is None
+            or len(config.model.config.encoder_layers) == 0
         ):
             self.enc_layers_to_use = list(
                 range(self.w_encoder.config.num_hidden_layers)
             )
         else:
             self.enc_layers_to_use = sorted(
-                [i - 1 for i in config.train.model.config.encoder_layers]
+                [i - 1 for i in config.model.config.encoder_layers]
             )
 
         # NOTE - get redction mechanism and init weights
-        if config.train.model.config.reduction == "weighted":
+        if config.model.config.reduction == "weighted":
             self.layer_weights = nn.Parameter(
                 torch.ones(len(self.enc_layers_to_use)) / len(self.enc_layers_to_use)
             )
-        elif config.train.model.config.reduction == "average":
+        elif config.model.config.reduction == "average":
             # non-learnable weights (buffer) for simple averaging
             self.register_buffer(
                 "layer_weights",
@@ -46,7 +46,7 @@ class SurgicalWhisper(BaseSegmentationModel):
             )
         else:
             raise ValueError(
-                f"Should not happen, `{self.config.train.model.config.reduction=}` should be 'average' or 'weighted'."
+                f"Should not happen, `{self.config.model.config.reduction=}` should be 'average' or 'weighted'."
             )
 
         self.classifier = nn.Sequential(
@@ -68,7 +68,7 @@ class SurgicalWhisper(BaseSegmentationModel):
             [hidden_states[i] for i in self.enc_layers_to_use], dim=0
         )
 
-        if self.config.train.model.config.reduction == "weighted":
+        if self.config.model.config.reduction == "weighted":
             # Apply softmax to weights for weighted average
             weights = torch.nn.functional.softmax(self.layer_weights, dim=0)
         else:

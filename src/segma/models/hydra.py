@@ -42,12 +42,12 @@ class HydraWhisper(BaseSegmentationModel):
             raise ValueError("Only MultiLabelEncoder is accepted for HydraWhisper.")
 
         self.feature_extractor, self.w_encoder = load_whisper(
-            self.config.train.model.config.encoder
+            self.config.model.config.encoder
         )
 
         self.lstm_shared = nn.LSTM(
             input_size=self.w_encoder.config.d_model,
-            **config.train.model.config.lstm.as_dict(),
+            **config.model.config.lstm.as_dict(),
         )
 
         lstm_out_features = (

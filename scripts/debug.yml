@@ -18,9 +18,11 @@ audio_config:
   # True if pyannet, False if Whisper
   strict_frames: False
 
+model: 
+  name: hydra_whisper
+
 train:
-  model: 
-    name: whisperidou
+    # name: whisperidou
     # name: surgical_whisper
     # name: pyannet
     # name: pyannet_slim

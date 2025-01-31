@@ -147,7 +147,6 @@ class ModelConfig(BaseConfig):
 
 @dataclass
 class TrainConfig(BaseConfig):
-    model: ModelConfig
     lr: float
     batch_size: int
     max_epochs: int
@@ -164,6 +163,7 @@ class Config(BaseConfig):
     wandb: WandbConfig
     data: DataConfig
     audio_config: AudioConfig
+    model: ModelConfig
     train: TrainConfig
 
 
@@ -233,9 +233,9 @@ def load_config(
         with open(config_path, "r") as f:
             config_data = yaml.safe_load(f)
         # NOTE - dummy patch to avoid adding `config: null` in `train.model`
-        if "config" not in config_data["train"]["model"]:
+        if "config" not in config_data["model"]:
             shoehorn = True
-            config_data["train"]["model"]["config"] = None
+            config_data["model"]["config"] = None
     except FileNotFoundError:
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
     except yaml.YAMLError as e:
@@ -255,20 +255,20 @@ def load_config(
         "surgicalwhisper": SurgicalWhisperConfig,
         "hydra_whisper": HydraWhisperConfig,
     }
-    # NOTE Manually shoehorn ModelConfig as config.train.model.config
+    # NOTE Manually shoehorn ModelConfig as config.model.config
     if shoehorn:
         if model_config_path is None:
-            model_config_path = f"src/segma/config/{config.train.model.name}.yml"
+            model_config_path = f"src/segma/config/{config.model.name}.yml"
 
         with open(model_config_path, "r") as f:
             model_config_data = yaml.safe_load(f)
 
-        config.train.model.config = create_dataclass_instance(
-            model_config_class[config.train.model.name], model_config_data
+        config.model.config = create_dataclass_instance(
+            model_config_class[config.model.name], model_config_data
         )
     # FIXME - why ?
-    if isinstance(config.train.model.config, dict):
-        config.train.model.config = create_dataclass_instance(
-            model_config_class[config.train.model.name], config.train.model.config
+    if isinstance(config.model.config, dict):
+        config.model.config = create_dataclass_instance(
+            model_config_class[config.model.name], config.model.config
         )
     return config

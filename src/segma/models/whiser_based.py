@@ -16,10 +16,10 @@ class Whisperidou(BaseSegmentationModel):
         super().__init__(
             label_encoder=label_encoder, config=config, weight_loss=weight_loss
         )
-        self.save_hyperparameters(self.config.train.model.config.as_dict())
+        self.save_hyperparameters(self.config.model.config.as_dict())
 
         self.feature_extractor, self.w_encoder = load_whisper(
-            self.config.train.model.config.encoder
+            self.config.model.config.encoder
         )
 
         self.classifier = nn.Sequential(
@@ -58,15 +58,15 @@ class WhisperiMax(BaseSegmentationModel):
         super().__init__(
             label_encoder=label_encoder, config=config, weight_loss=weight_loss
         )
-        self.save_hyperparameters(self.config.train.model.config.as_dict())
+        self.save_hyperparameters(self.config.model.config.as_dict())
 
         self.feature_extractor, self.w_encoder = load_whisper(
-            self.config.train.model.config.encoder
+            self.config.model.config.encoder
         )
 
         self.lstm = nn.LSTM(
             input_size=self.w_encoder.config.d_model,
-            **self.config.train.model.config.lstm.as_dict(),
+            **self.config.model.config.lstm.as_dict(),
         )
 
         lstm_out_features: int = self.lstm.hidden_size * 2

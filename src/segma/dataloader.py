@@ -397,6 +397,7 @@ def windows_to_targets(
         start, end = w
         intersecting_labels = set([label for _, _, label in labels.find((start, end))])
 
+        # NOTE - given a set of labels, return the one_hot representation
         y_target.append(label_encoder.one_hot(intersecting_labels))
 
     return np.array(y_target, dtype=np.float32)

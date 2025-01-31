@@ -49,3 +49,7 @@ it:
 # by replacing all `delim_whitespace=True` with `sep=" "`
 fix-pd:
 	sed -i 's/delim_whitespace=True/sep=" "/g' .venv_inference/lib/python3.12/site-packages/pyannote/database/util.py
+
+
+line-count:
+	find src tests scripts -name '*.py' | xargs wc -l

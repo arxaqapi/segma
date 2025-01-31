@@ -42,7 +42,7 @@ c clean:
 # module load uv; source env
 # uv run scripts/train.py --model pyannet --dataset debug
 it:
-	srun --export=ALL --mem=60G --time=5:00:00 --partition=gpu --gres=gpu:1 --job-name=VTC_IT --pty bash
+	srun --export=ALL --mem=60G --time=24:00:00 --partition=gpu --gres=gpu:1 --job-name=segma_it --pty bash
 
 
 # fix file .venv_inference/lib/python3.12/site-packages/pyannote/database/util.py

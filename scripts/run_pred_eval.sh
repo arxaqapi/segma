@@ -4,14 +4,10 @@
 ##SBATCH --export=ALL                       # Export your environment to the compute node
 #SBATCH --gres=gpu:1
 #SBATCH --mem=40G                         # ram
-#SBATCH --exclude=puck5                 # Do not run on puck5 node
+##SBATCH --exclude=puck5                 # Do not run on puck5 node
 #SBATCH --cpus-per-task=4
 #SBATCH --time=20:00:00
 #SBATCH --output=logs/slurm-%j-pred-eval.out
-
-# srun python scripts/train.py --wandb --model pyannet --tags no_speech pyannet --dataset baby_train
-# srun python scripts/train.py --wandb --model whisperimax --tags no_speech whisperimax --dataset baby_train
-
 
 
 # 1. predict on data
@@ -25,6 +21,7 @@ ckpt="epoch=18-val_loss=2.132.ckpt"
 # ckpt="epoch=04-val_loss=2.133.ckpt"
 
 uv run scripts/predict.py \
+    --config models/$model_id/config.yml \
     --uris data/baby_train/test.txt \
     --wavs data/baby_train/wav \
     --ckpt models/$model_id/checkpoints/$ckpt
@@ -35,4 +32,5 @@ source .venv_inference/bin/activate
 
 python scripts/evaluate.py \
     --gt data/baby_train/rttm \
-    --pred models/$model_id/rttm
+    --pred models/$model_id/rttm \
+    --config models/$model_id/config.yml

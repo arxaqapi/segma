@@ -47,5 +47,5 @@ class Whisperidou(BaseSegmentationModel):
     def audio_preparation_hook(self, audio_t):
         # 'np': numpy | 'pt': pytorch
         return self.feature_extractor(
-            audio_t, return_tensors="pt", sampling_rate=16_000
+            audio_t, return_tensors="pt", sampling_rate=self.config.audio.sample_rate
         )["input_features"]

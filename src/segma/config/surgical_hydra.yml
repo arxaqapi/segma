@@ -1,0 +1,12 @@
+encoder: whisper_base_encoder
+encoder_layers: []
+reduction: weighted
+
+lstm:
+  hidden_size: 128
+  num_layers: 2
+  bidirectional: true
+  dropout: 0.5
+
+classifier: 256
+

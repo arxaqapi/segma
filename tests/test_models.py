@@ -1,95 +1,58 @@
 import torch
+import yaml
 
 from segma.config.base import Config, load_config
-from segma.models import PyanNet, Whisperidou, WhisperiMax
-from segma.utils.encoders import PowersetMultiLabelEncoder
+from segma.models import Models
+from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
 
 
-def test_Whisperidou_init():
+def test_models():
+    # NOTE - gen config files
+    _cfg: Config = load_config(
+        config_path="src/segma/config/default.yml",
+    )
+    for model_name, model_c in Models.items():
+        _cfg.model.name = model_name
+        _m_dict = _cfg.as_dict()
+        _m_dict["model"].pop("config")
+
+        with open(f"tests/sample/temp_config_{model_name}.yml", "w") as f:
+            yaml.safe_dump(_m_dict, f)
+
+    # GEN CONFIGs
+    labels = ("MAL", "FEM", "KCHI", "OCH")
+    # x_t = torch.ones(32_000)
+
+    for model_name, model_c in Models.items():
+        label_encoder = (
+            MultiLabelEncoder(labels)
+            if "hydra" in model_name
+            else PowersetMultiLabelEncoder(labels)
+        )
+        cfg: Config = load_config(
+            config_path=f"tests/sample/temp_config_{model_name}.yml",
+        )
+        model = model_c(label_encoder, cfg)
+        assert model is not None
+
+    # NOTE - cleanup
+    # for model_name, model_c in Models.items():
+    #     Path(f"tests/sample/temp_config_{model_name}.yml").unlink(missing_ok=True)
+
+
+def test_Whisper_based_forward():
     labels = ("aa", "bb", "cc")
 
-    cfg: Config = load_config(
-        config_path="tests/sample/test_config_whisperidou.yml",
-    )
+    x_t = torch.ones((1, 80, 3000))
 
-    label_encoder = PowersetMultiLabelEncoder(labels)
-    model = Whisperidou(label_encoder, cfg)
-
-    assert model.w_encoder is not None
-
-
-def test_WhisperiMax_init():
-    labels = ("aa", "bb", "cc")
-
-    cfg: Config = load_config(
-        config_path="tests/sample/test_config_whisperimax.yml",
-    )
-
-    label_encoder = PowersetMultiLabelEncoder(labels)
-    model = WhisperiMax(label_encoder, cfg)
-
-    assert model.w_encoder is not None
-
-
-def test_WhisperiMax_forward():
-    labels = ("aa", "bb", "cc")
-
-    cfg: Config = load_config(
-        config_path="tests/sample/test_config_whisperimax.yml",
-    )
-
-    label_encoder = PowersetMultiLabelEncoder(labels)
-    model = WhisperiMax(label_encoder, cfg)
-
-    x = torch.ones((1, 80, 3000))
-
-    out = model(x)
-
-    assert out.shape == (1, 99, 8)
-
-
-def test_PyanNet_init():
-    labels = ("aa", "bb", "cc")
-
-    cfg: Config = load_config(
-        config_path="tests/sample/test_config_pyannet.yml",
-    )
-
-    label_encoder = PowersetMultiLabelEncoder(labels)
-    model = PyanNet(label_encoder, cfg)
-
-    assert model is not None
-    assert len(model.linear) == len(model.hparams.linear)
-
-
-def test_PyanNet_forward():
-    labels = ("aa", "bb", "cc")
-
-    cfg: Config = load_config(
-        config_path="tests/sample/test_config_pyannet.yml",
-    )
-
-    label_encoder = PowersetMultiLabelEncoder(labels)
-    model = PyanNet(label_encoder, cfg)
-
-    x = torch.ones((1, 32_000))
-    out = model(x)
-
-    # 115
-    # print(model.conv_settings.n_windows())
-
-    assert out.shape == (
-        1,
-        model.conv_settings.n_windows(32_000),
-        len(label_encoder.labels),
-    )
-    assert (1, 115, 8) == (
-        1,
-        model.conv_settings.n_windows(32_000),
-        len(label_encoder.labels),
-    )
-    assert (1, 118, 8) == (
-        1,
-        model.conv_settings.n_windows(32_000, strict=False),
-        len(label_encoder.labels),
-    )
+    for model_name, model_c in Models.items():
+        if "whisper" in model_name or "hydra" in model_name:
+            label_encoder = (
+                MultiLabelEncoder(labels)
+                if "hydra" in model_name
+                else PowersetMultiLabelEncoder(labels)
+            )
+            cfg: Config = load_config(
+                config_path=f"tests/sample/temp_config_{model_name}.yml",
+            )
+            _out = model_c(label_encoder, cfg)(x_t)

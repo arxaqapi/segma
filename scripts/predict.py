@@ -56,7 +56,7 @@ if __name__ == "__main__":
             args.output = Path("segma_out")
 
     # REVIEW
-    model = Models[cfg.train.model.name].load_from_checkpoint(
+    model = Models[cfg.model.name].load_from_checkpoint(
         checkpoint_path=args.ckpt, label_encoder=l_encoder, config=cfg
     )
 

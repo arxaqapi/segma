@@ -79,7 +79,7 @@ if __name__ == "__main__":
         | PyanNetSlim
         | SurgicalWhisper
         | HydraWhisper
-    ) = Models[cfg.train.model.name](l_encoder, cfg)
+    ) = Models[cfg.model.name](l_encoder, cfg)
 
     mode, monitor = get_metric(cfg.train.validation_metric)
 
@@ -190,7 +190,7 @@ if __name__ == "__main__":
 
     # https://pytorch.org/docs/main/torch.compiler_troubleshooting.html#dealing-with-recompilations
     # https://docs.google.com/document/d/1y5CRfMLdwEoF1nTk9q8qEu1mgMUuUtvhklPKJ2emLU8/edit?tab=t.0#heading=h.t130sdb4rshr
-    if cfg.train.model.name in ("hydra_whisper", "HydraWhisper"):
+    if cfg.model.name in ("hydra_whisper", "HydraWhisper"):
         torch._dynamo.config.accumulated_cache_size_limit = 32
         if hasattr(torch._dynamo.config, "cache_size_limit"):
             torch._dynamo.config.cache_size_limit = 32

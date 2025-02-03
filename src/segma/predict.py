@@ -10,6 +10,7 @@ from segma.config.base import Config
 from segma.models.base import BaseSegmentationModel
 from segma.structs.interval import Interval, Intervals
 from segma.utils.conversions import frames_to_milliseconds
+from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
 from segma.utils.receptive_fields import rf_end_i, rf_start_i
 
 
@@ -141,7 +142,7 @@ def sliding_prediction(
             strict=config.audio.strict_frames,
         )
     ]
-    # REVIEW - n_frames is too restrictive, this hackeridou is awfull
+    # REVIEW - n_frames is too restrictive, this hackeridou is awfull (31xxx -> 32000)
     reference_windows[-1][-1] = chunck_size_f
 
     all_intervals = Intervals()
@@ -185,26 +186,56 @@ def sliding_prediction(
                 )
             )
 
-        # NOTE - using windows of size 20ms in model output
-        for batch_i, batch in enumerate(output_t):
-            # batch: (windows, n_labels)
-            predictions = batch.argmax(-1)
-            for pred, (w_start, w_end) in zip(predictions, reference_windows):
-                offset = start_i + batch_i * chunck_size_f
-                frame_start = w_start + offset
-                # FIXME - Intervals needs to be fixed
-                frame_end = w_end + offset + 1
-                # NOTE - skip padded section
-                if n_frames_to_pad > 0 and frame_start > (end_i - n_frames_to_pad):
-                    break
-                    # print(
-                    #     "[log] - we stop the recording of predictions since we are in padded zone now"
-                    # )
+        # NOTE - only for MultiLabel models: x * (30, 99, 1)
+        # TODO handle using label_encoder (thats its usecase)
+        if isinstance(model.label_encoder, MultiLabelEncoder):
+            for key, head_output_t in output_t.items():
+                head_label = key.removeprefix("linear_head_")
+                for batch_i, batch in enumerate(head_output_t):
+                    label_prediction = (batch > 0.5).int()
+                    for pred, (w_start, w_end) in zip(
+                        label_prediction, reference_windows
+                    ):
+                        offset = start_i + batch_i * chunck_size_f
+                        frame_start = w_start + offset
+                        # FIXME - Intervals needs to be fixed
+                        frame_end = w_end + offset + 1
+                        # NOTE - skip padded section
+                        if n_frames_to_pad > 0 and frame_start > (
+                            end_i - n_frames_to_pad
+                        ):
+                            break
+                        found_labels = [] if pred == 0 else [head_label]
+                        for label in found_labels:
+                            corresponding_interval: Interval = (
+                                frame_start,
+                                frame_end,
+                                label,
+                            )
+                            all_intervals.add(corresponding_interval)
 
-                found_labels = model.label_encoder.inv_transform(pred.item())
-                for label in found_labels:
-                    corresponding_interval: Interval = (frame_start, frame_end, label)
-                    all_intervals.add(corresponding_interval)
+        elif isinstance(model.label_encoder, PowersetMultiLabelEncoder):
+            # NOTE - using windows of size 20ms in model output
+            for batch_i, batch in enumerate(output_t):
+                # batch: (windows, n_labels)
+                predictions = batch.argmax(-1)
+                for pred, (w_start, w_end) in zip(predictions, reference_windows):
+                    offset = start_i + batch_i * chunck_size_f
+                    frame_start = w_start + offset
+                    # FIXME - Intervals needs to be fixed
+                    frame_end = w_end + offset + 1
+                    # NOTE - skip padded section
+                    if n_frames_to_pad > 0 and frame_start > (end_i - n_frames_to_pad):
+                        break
+
+                    found_labels = model.label_encoder.inv_transform(pred.item())
+                    for label in found_labels:
+                        corresponding_interval: Interval = (
+                            frame_start,
+                            frame_end,
+                            label,
+                        )
+                        all_intervals.add(corresponding_interval)
 
     # NOTE - generate & write; aa & rttms
     write_intervals(intervals=all_intervals, audio_path=audio_path, output_p=output_p)

@@ -6,9 +6,7 @@ import torch
 from segma.config import Config, load_config
 from segma.models import Models
 from segma.predict import sliding_prediction
-
-# from segma.predict import prediction
-from segma.utils.encoders import PowersetMultiLabelEncoder
+from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -43,7 +41,10 @@ if __name__ == "__main__":
 
     cfg: Config = load_config(args.config)
 
-    l_encoder = PowersetMultiLabelEncoder(labels=cfg.data.classes)
+    if "hydra" in cfg.model.name:
+        l_encoder = MultiLabelEncoder(labels=cfg.data.classes)
+    else:
+        l_encoder = PowersetMultiLabelEncoder(labels=cfg.data.classes)
 
     # NOTE - resolve output_path
     # if path is model/last/best -> resolve symlink

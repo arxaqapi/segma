@@ -125,6 +125,7 @@ def sliding_prediction(
 ):
     """do not open audio entirely
     - perform slide-wise"""
+    model.eval()
     batch_size = 32
     chunck_size_f = int(config.audio.chunk_duration_s) * config.audio.sample_rate
     meta_b_size = batch_size * chunck_size_f
@@ -178,7 +179,6 @@ def sliding_prediction(
         batch_t = torch.clone(batch_t)
 
         # NOTE - pass batch through model
-        model.eval()
         with torch.no_grad():
             output_t = model(
                 batch_t.to(

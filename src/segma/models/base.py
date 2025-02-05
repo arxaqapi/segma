@@ -139,6 +139,7 @@ class BaseSegmentationModel(pl.LightningModule):
                 logger=True,
             )
 
+        if "partial_loss" in self.config.train.extra_val_metrics:
             # create a weight vector of size len(self.label_encoder) and put the first n elements to 1.
             weights = torch.zeros(size=(len(self.label_encoder),)).to(self.device)
             weights[:n_single] = 1.0
@@ -154,6 +155,23 @@ class BaseSegmentationModel(pl.LightningModule):
                 prog_bar=True,
                 logger=True,
             )
+        # loss per label
+        if "label_loss" in self.config.train.extra_val_metrics:
+            for i in range(n_single):
+                weights = torch.zeros(size=(len(self.label_encoder),)).to(self.device)
+                weights[i] = 1.0
+                label_loss = torch.nn.functional.cross_entropy(
+                    input=y_pred, target=y_target, weight=weights
+                )
+                label_name = " & ".join(self.label_encoder.inv_transform(i))
+                self.log(
+                    f"val/label_loss_{label_name if label_name else "NOISE"}",
+                    label_loss,
+                    on_step=True,
+                    on_epoch=True,
+                    prog_bar=True,
+                    logger=True,
+                )
 
         if (
             self.config.train.validation_metric == "f1_score"
@@ -185,7 +203,7 @@ class BaseSegmentationModel(pl.LightningModule):
                 c_f1_score = round(c_f1_score.item(), 6)
                 label_name = " & ".join(self.label_encoder.inv_transform(i))
                 self.log(
-                    f"val/f1_score/{label_name}",
+                    f"val/f1_score/{label_name if label_name else "NOISE"}",
                     c_f1_score,
                     on_epoch=True,
                     prog_bar=True,

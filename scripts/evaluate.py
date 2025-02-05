@@ -11,7 +11,11 @@ from pyannote.database.util import load_rttm
 
 # from segma.annotation import AudioAnnotation
 from segma.config import load_config
-from segma.utils.encoders import LabelEncoder, PowersetMultiLabelEncoder
+from segma.utils.encoders import (
+    LabelEncoder,
+    MultiLabelEncoder,
+    PowersetMultiLabelEncoder,
+)
 
 
 def get_model_output_as_annotations(output_path: Path) -> dict[str, Annotation]:
@@ -118,6 +122,8 @@ if __name__ == "__main__":
     eval_model_output(
         rttm_true_p=args.gt,
         rttm_pred_p=args.pred,
-        label_encoder=PowersetMultiLabelEncoder(labels=cfg.data.classes),
+        label_encoder=MultiLabelEncoder(labels=cfg.data.classes)
+        if "hydra" in cfg.model.name
+        else PowersetMultiLabelEncoder(labels=cfg.data.classes),
         scores_output=args.pred.parent / "fscore.csv",
     )

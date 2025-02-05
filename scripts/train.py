@@ -28,9 +28,7 @@ from segma.models import (
     Whisperidou,
     WhisperiMax,
 )
-from segma.utils.encoders import MultiLabelEncoder
-
-# from segma.utils.encoders import PowersetMultiLabelEncoder
+from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
 
 
 def get_metric(metric: str) -> tuple[Literal["min", "max"], str]:
@@ -69,8 +67,10 @@ if __name__ == "__main__":
     if not chkp_path.exists():
         chkp_path.mkdir()
 
-    l_encoder = MultiLabelEncoder(cfg.data.classes)
-    # l_encoder = PowersetMultiLabelEncoder(cfg.data.classes)
+    if "hydra" in cfg.model.name:
+        l_encoder = MultiLabelEncoder(labels=cfg.data.classes)
+    else:
+        l_encoder = PowersetMultiLabelEncoder(labels=cfg.data.classes)
 
     model: (
         Whisperidou

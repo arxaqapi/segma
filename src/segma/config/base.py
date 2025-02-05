@@ -1,6 +1,6 @@
 from dataclasses import asdict, dataclass, fields, is_dataclass
 from pathlib import Path
-from typing import Any, Literal, Type, TypeVar, Union, get_type_hints
+from typing import Any, Literal, Type, TypeVar, Union, get_type_hints, TypeAlias
 
 import yaml
 
@@ -137,7 +137,7 @@ class SurgicalHydraConfig(BaseConfig):
     classifier: int
 
 
-type ModelConfig_T = (
+ModelConfig_T: TypeAlias = (
     PyanNetConfig
     | PyanNetSlimConfig
     | WhisperidouConfig

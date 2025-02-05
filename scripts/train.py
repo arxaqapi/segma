@@ -36,7 +36,7 @@ def get_metric(metric: str) -> tuple[Literal["min", "max"], str]:
         return "min", "val/loss"
     elif metric == "auroc":
         return "max", "val/auroc"
-    elif metric == "fscore" or metric == "f1_score":
+    elif metric == "f1_score":
         return "max", "val/f1_score"
     else:
         raise ValueError(
@@ -54,6 +54,13 @@ if __name__ == "__main__":
         help="Config file to be loaded and used for the training.",
     )
     parser.add_argument(
+        "-mc",
+        "--model-config",
+        type=str,
+        default=None,
+        help="Config file to be loaded and used for the training.",
+    )
+    parser.add_argument(
         "--tags",
         nargs="*",
         default=[],
@@ -61,7 +68,9 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    cfg: Config = load_config(args.config)
+    cfg: Config = load_config(
+        config_path=args.config, model_config_path=args.model_config
+    )
 
     chkp_path = Path("models")
     if not chkp_path.exists():

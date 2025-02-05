@@ -19,19 +19,20 @@ audio:
   strict_frames: False
 
 model: 
-  name: hydra_whisper
+  name: surgical_hydra
+  # name: hydra_whisper
+  # name: whisperidou
+  # name: surgical_whisper
+  # name: pyannet
+  # name: pyannet_slim
 
 train:
-    # name: whisperidou
-    # name: surgical_whisper
-    # name: pyannet
-    # name: pyannet_slim
   lr: 0.001
-  batch_size: 32
+  batch_size: 16
   max_epochs: 40
-  # validation_metric: loss
-  # validation_metric: f1_score
-  validation_metric: auroc
+  validation_metric: loss
+  # validation_metric: f1_score, auroc
+  extra_val_metrics: [loss]
   # simple or advanced (python <= 3.11)
   profiler: null
 

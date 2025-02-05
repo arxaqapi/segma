@@ -27,6 +27,7 @@ train:
   batch_size: 32
   max_epochs: 100
   validation_metric: auroc
+  extra_val_metrics: [f1_score, loss, auroc]
   # simple or advanced (python <= 3.11)
   profiler: null
 

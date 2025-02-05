@@ -165,7 +165,7 @@ class BaseSegmentationModel(pl.LightningModule):
                 )
                 label_name = " & ".join(self.label_encoder.inv_transform(i))
                 self.log(
-                    f"val/label_loss_{label_name if label_name else "NOISE"}",
+                    f"val/label_loss_{label_name if label_name else 'NOISE'}",
                     label_loss,
                     on_step=True,
                     on_epoch=True,
@@ -203,7 +203,7 @@ class BaseSegmentationModel(pl.LightningModule):
                 c_f1_score = round(c_f1_score.item(), 6)
                 label_name = " & ".join(self.label_encoder.inv_transform(i))
                 self.log(
-                    f"val/f1_score/{label_name if label_name else "NOISE"}",
+                    f"val/f1_score/{label_name if label_name else 'NOISE'}",
                     c_f1_score,
                     on_epoch=True,
                     prog_bar=True,

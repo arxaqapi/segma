@@ -1,5 +1,5 @@
 wandb:
-  log: True
+  offline: false
   project: Segma debug
   name: train-whisperidou
 

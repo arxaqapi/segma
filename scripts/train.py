@@ -13,7 +13,7 @@ from lightning.pytorch.callbacks import (
     ModelCheckpoint,
 )
 from lightning.pytorch.callbacks.progress.tqdm_progress import TQDMProgressBar
-from lightning.pytorch.loggers import CSVLogger
+from lightning.pytorch.loggers import WandbLogger
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
@@ -114,39 +114,17 @@ if __name__ == "__main__":
     reference_time = datetime.fromtimestamp(time.time()).strftime("%Y%m%d_%H%M%S")
     save_path = Path("models") / f"{reference_time}"
 
-    if not cfg.wandb.log:
-        print("[log] - use CSVLogger")
+    print("[log] - use WandbLogger")
 
-        logger = CSVLogger(save_dir=save_path)
-    else:
-        print("[log] - use WandbLogger")
-        from lightning.pytorch.loggers import WandbLogger
-
-        logger = WandbLogger(
-            project=cfg.wandb.project,
-            name=cfg.wandb.name,
-            log_model="all",
-            tags=args.tags,
-        )
-        # try:
-        #     logger = WandbLogger(
-        #         project=cfg.wandb.project,
-        #         name=cfg.wandb.name,
-        #         log_model="all",
-        #         tags=args.tags,
-        #     )
-        # except Exception as _:
-        #     import wandb
-
-        #     wandb.init(mode="disabled")
-        #     logger = WandbLogger(
-        #         project=cfg.wandb.project,
-        #         name=cfg.wandb.name,
-        #         log_model="all",
-        #         tags=args.tags,
-        #     )
-        logger.experiment.config.update(cfg.as_dict())
-        save_path = save_path.with_stem(save_path.stem + f"-{logger.experiment.id}")
+    logger = WandbLogger(
+        project=cfg.wandb.project,
+        name=cfg.wandb.name,
+        log_model="all",
+        tags=args.tags,
+        offline=cfg.wandb.offline,
+    )
+    logger.experiment.config.update(cfg.as_dict())
+    save_path = save_path.with_stem(save_path.stem + f"-{logger.experiment.id}")
 
     save_path.mkdir(parents=True, exist_ok=True)
     cfg.save(save_path / "config.yml")

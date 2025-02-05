@@ -1,5 +1,5 @@
 wandb:
-  log: False
+  offline: true
   project: Segma debug
   name: db_train
 

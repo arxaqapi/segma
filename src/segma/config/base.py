@@ -35,7 +35,7 @@ class BaseConfig:
 
 @dataclass
 class WandbConfig(BaseConfig):
-    log: bool
+    offline: bool
     project: str
     name: str
 

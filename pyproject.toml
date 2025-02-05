@@ -32,6 +32,9 @@ dev-dependencies = [
     "basedpyright>=1.23.2",
 ]
 
+[tool.ruff.lint]
+ignore = ["E722"]
+
 [tool.mypy]
 exclude = ["scripts"]
 

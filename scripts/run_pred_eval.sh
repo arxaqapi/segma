@@ -16,15 +16,14 @@ module load audio-tools
 
 model_id=20250122_234139-zgl0ahak
 ckpt="epoch=18-val_loss=2.132.ckpt"
-
-# model_id=20250123_003929-opn3jjm0
-# ckpt="epoch=04-val_loss=2.133.ckpt"
+out_folder=out
 
 uv run scripts/predict.py \
     --config models/$model_id/config.yml \
     --uris data/baby_train/test.txt \
     --wavs data/baby_train/wav \
-    --ckpt models/$model_id/checkpoints/$ckpt
+    --ckpt models/$model_id/checkpoints/$ckpt \
+    --output models/$model_id/$out_folder
 
 
 # 2. evaluate predictions
@@ -32,5 +31,5 @@ source .venv_inference/bin/activate
 
 python scripts/evaluate.py \
     --gt data/baby_train/rttm \
-    --pred models/$model_id/rttm \
+    --pred models/$model_id/$out_folder/rttm \
     --config models/$model_id/config.yml

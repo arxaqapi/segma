@@ -1,7 +1,7 @@
 .PHONY: base f format tc type-check t test debug profile z zip uz unzip c clean it
 
 
-base: f tc
+base: f t
 
 f format:
 	@uv run ruff check --select I --fix

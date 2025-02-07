@@ -268,6 +268,8 @@ class BaseSegmentationModel(pl.LightningModule):
             roc_fig.tight_layout()
 
             try:
+                # https://lightning.ai/docs/pytorch/stable/extensions/generated/lightning.pytorch.loggers.WandbLogger.html
+                # self.logger.log_image(key="ROC_curves", images=[roc_fig])
                 self.logger.experiment.log({"ROC_curves": wandb.Image(roc_fig)})
             except Exception as _:
                 pass

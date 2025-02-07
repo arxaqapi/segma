@@ -1,6 +1,7 @@
 # find models/last -maxdepth 1 -type l -exec unlink {} \;
-data_folder="data/debug_50"
+data_folder="data/debug"
 
+# TORCH_LOGS="recompiles"
 source .venv/bin/activate
 uv run scripts/train.py --config scripts/debug.yml --tags debug
 

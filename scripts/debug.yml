@@ -4,7 +4,7 @@ wandb:
   name: db_train
 
 data:
-  dataset_path: data/debug_50
+  dataset_path: data/debug
   classes: 
     - male
     - female

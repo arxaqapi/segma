@@ -1,6 +1,6 @@
 from dataclasses import asdict, dataclass, fields, is_dataclass
 from pathlib import Path
-from typing import Any, Literal, Type, TypeVar, Union, get_type_hints, TypeAlias
+from typing import Any, Literal, Type, TypeVar, Union, get_type_hints
 
 import yaml
 
@@ -137,22 +137,20 @@ class SurgicalHydraConfig(BaseConfig):
     classifier: int
 
 
-ModelConfig_T: TypeAlias = (
-    PyanNetConfig
-    | PyanNetSlimConfig
-    | WhisperidouConfig
-    | WhisperimaxConfig
-    | SurgicalWhisperConfig
-    | HydraWhisperConfig
-    | SurgicalHydraConfig
-)
-
-
 @dataclass
 class ModelConfig(BaseConfig):
     name: str
     # is initialized as None in first pass, then as the correct model class manually (sub-optimal)
-    config: None | ModelConfig_T
+    config: (
+        None
+        | PyanNetConfig
+        | PyanNetSlimConfig
+        | WhisperidouConfig
+        | WhisperimaxConfig
+        | SurgicalWhisperConfig
+        | HydraWhisperConfig
+        | SurgicalHydraConfig
+    )
 
 
 @dataclass

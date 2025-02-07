@@ -129,7 +129,7 @@ if __name__ == "__main__":
     logger = WandbLogger(
         project=cfg.wandb.project,
         name=cfg.wandb.name,
-        log_model="all",
+        log_model=False if cfg.wandb.offline else "all",
         tags=args.tags,
         offline=cfg.wandb.offline,
     )

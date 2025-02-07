@@ -32,16 +32,17 @@ from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
 
 
 def get_metric(metric: str) -> tuple[Literal["min", "max"], str]:
-    if metric == "loss":
-        return "min", "val/loss"
-    elif metric == "auroc":
-        return "max", "val/auroc"
-    elif metric == "f1_score":
-        return "max", "val/f1_score"
-    else:
-        raise ValueError(
-            f"metric '{metric}' is not supported, please use 'loss', 'auroc' or 'fscore'."
-        )
+    match metric:
+        case "loss":
+            return "min", "val/loss"
+        case "f1_score":
+            return "max", "val/f1_score"
+        case "auroc":
+            return "max", "val/auroc"
+        case _:
+            raise ValueError(
+                f"metric '{metric}' is not supported, please use 'loss', 'auroc' or 'f1_score'."
+            )
 
 
 if __name__ == "__main__":

@@ -35,10 +35,6 @@ def test_models():
         model = model_c(label_encoder, cfg)
         assert model is not None
 
-    # NOTE - cleanup
-    # for model_name, model_c in Models.items():
-    #     Path(f"tests/sample/temp_config_{model_name}.yml").unlink(missing_ok=True)
-
 
 def test_Whisper_based_forward():
     labels = ("aa", "bb", "cc")
@@ -56,3 +52,11 @@ def test_Whisper_based_forward():
                 config_path=f"tests/sample/temp_config_{model_name}.yml",
             )
             _out = model_c(label_encoder, cfg)(x_t)
+
+
+def test_cleanup():
+    # NOTE - cleanup
+    from pathlib import Path
+
+    for model_name, model_c in Models.items():
+        Path(f"tests/sample/temp_config_{model_name}.yml").unlink(missing_ok=True)

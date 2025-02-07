@@ -6,12 +6,11 @@ from segma.models import Models
 from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
 
 
-def test_models():
-    # NOTE - gen config files
+def test_setup_gen_conf():
     _cfg: Config = load_config(
         config_path="src/segma/config/default.yml",
     )
-    for model_name, model_c in Models.items():
+    for model_name, _model_c in Models.items():
         _cfg.model.name = model_name
         _m_dict = _cfg.as_dict()
         _m_dict["model"].pop("config")
@@ -19,9 +18,9 @@ def test_models():
         with open(f"tests/sample/temp_config_{model_name}.yml", "w") as f:
             yaml.safe_dump(_m_dict, f)
 
-    # GEN CONFIGs
+
+def test_models():
     labels = ("MAL", "FEM", "KCHI", "OCH")
-    # x_t = torch.ones(32_000)
 
     for model_name, model_c in Models.items():
         label_encoder = (

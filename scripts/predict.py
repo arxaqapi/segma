@@ -55,6 +55,8 @@ if __name__ == "__main__":
             args.output = Path("/".join(args.ckpt.parts[-4:-2]))
         except:
             args.output = Path("segma_out")
+    else:
+        args.output = Path(args.output)
 
     # REVIEW
     model = Models[cfg.model.name].load_from_checkpoint(

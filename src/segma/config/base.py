@@ -192,7 +192,7 @@ def _merge_dict(source, destination):
     return destination
 
 
-def load_config(config_path: Path, cli_extra_args: list[str]) -> Config:
+def load_config(config_path: Path, cli_extra_args: list[str] = []) -> Config:
     config_path = Path(config_path)
     # NOTE - load model config
     with config_path.open("r") as f:

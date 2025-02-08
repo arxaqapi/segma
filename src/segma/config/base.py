@@ -76,7 +76,7 @@ class LSTMConfig(BaseConfig):
     hidden_size: int
     num_layers: int
     bidirectional: int
-    dropout: int
+    dropout: float
 
 
 @dataclass
@@ -192,11 +192,13 @@ def _merge_dict(source, destination):
     return destination
 
 
-def load_config(config_path: Path, cli_extra_args: list[str] = []) -> Config:
+def load_config(config_path: Path | str, cli_extra_args: list[str] = []) -> Config:
     config_path = Path(config_path)
+
     # NOTE - load model config
     with config_path.open("r") as f:
         config_d = yaml.safe_load(f)
+
     # NOTE - add model config to dict
     model_c_p = Path(f"src/segma/config/{config_d['model']['name']}.yml")
     if not model_c_p.exists():
@@ -205,8 +207,17 @@ def load_config(config_path: Path, cli_extra_args: list[str] = []) -> Config:
         )
     with model_c_p.open("r") as f:
         config_d["model"]["config"] = yaml.safe_load(f)
+
     # NOTE - merge with extra_args_dict
     config_d = OmegaConf.merge(config_d, OmegaConf.from_cli(cli_extra_args))
     config_d = OmegaConf.to_object(config_d)
+
     # NOTE - attempt to recursively instantiate
-    return dacite.from_dict(data_class=Config, data=config_d)
+    return dacite.from_dict(
+        data_class=Config,
+        data=config_d,
+        config=dacite.Config(
+            strict=True,
+            strict_unions_match=True,
+        ),
+    )

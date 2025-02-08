@@ -125,9 +125,7 @@ class PyanNet(BaseSegmentationModel):
             dropout=lstm_c.dropout,
         )
 
-        lstm_out_features: int = self.hparams.lstm["hidden_size"] * (
-            2 if self.hparams.lstm["bidirectional"] else 1
-        )
+        lstm_out_features: int = lstm_c.hidden_size * (2 if lstm_c.bidirectional else 1)
         self.linear = nn.ModuleList(
             [
                 nn.Linear(in_features, out_features)
@@ -135,12 +133,13 @@ class PyanNet(BaseSegmentationModel):
                     [
                         lstm_out_features,
                     ]
-                    + [self.hparams.linear[0]] * len(self.hparams.linear)
+                    + [self.config.model.config.linear[0]]
+                    * len(self.config.model.config.linear)
                 )
             ]
         )
         self.classifier = nn.Linear(
-            self.hparams.classifier, len(self.label_encoder.labels)
+            self.config.model.config.classifier, len(self.label_encoder.labels)
         )
         self.activation = nn.Sigmoid()
 
@@ -171,7 +170,7 @@ class PyanNet(BaseSegmentationModel):
             outputs.transpose(2, 1)
         )
 
-        if len(self.hparams.linear) > 0:
+        if len(self.config.model.config.linear) > 0:
             for linear in self.linear:
                 outputs = torch.nn.functional.leaky_relu(linear(outputs))
 
@@ -195,16 +194,19 @@ class PyanNetSlim(BaseSegmentationModel):
         # self.linear_stack = nn.ModuleList(
         self.linear = nn.ModuleList(
             [
-                nn.Linear(60, self.hparams.linear[0]),
+                nn.Linear(60, self.config.model.config.linear[0]),
                 nn.LeakyReLU(),
                 nn.Dropout(),
-                nn.Linear(self.hparams.linear[0], self.hparams.linear[1]),
+                nn.Linear(
+                    self.config.model.config.linear[0],
+                    self.config.model.config.linear[1],
+                ),
                 nn.LeakyReLU(),
                 nn.Dropout(),
             ]
         )
         self.classifier = nn.Linear(
-            self.hparams.classifier, len(self.label_encoder.labels)
+            self.config.model.config.classifier, len(self.label_encoder.labels)
         )
         self.activation = nn.Sigmoid()
 

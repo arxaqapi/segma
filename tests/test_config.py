@@ -25,14 +25,7 @@ def test_load_config():
         config_path="tests/sample/temp_config_whisperidou.yml",
     )
 
-    cfg_2 = load_config(
-        config_path="tests/sample/temp_config_whisperidou.yml",
-        model_config_path="src/segma/config/whisperidou.yml",
-    )
-
-    assert cfg == cfg_2
-
-    assert cfg is not None
+    assert cfg
 
     assert cfg.wandb.offline in [True, False]
     assert cfg.wandb.project == "Segma debug"

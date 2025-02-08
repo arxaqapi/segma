@@ -7,6 +7,7 @@ notebooks/
 whisper_*_encoder/
 *.tar.gz
 scripts/jz
+scripts/extra/*.tsv
 
 # extra
 .vscode

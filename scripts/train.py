@@ -68,10 +68,8 @@ if __name__ == "__main__":
         help="Tags to be added to the wandb logging instance.",
     )
 
-    args = parser.parse_args()
-    cfg: Config = load_config(
-        config_path=args.config, model_config_path=args.model_config
-    )
+    args, extra_args = parser.parse_known_args()
+    cfg: Config = load_config(config_path=args.config, cli_extra_args=extra_args)
 
     chkp_path = Path("models")
     if not chkp_path.exists():

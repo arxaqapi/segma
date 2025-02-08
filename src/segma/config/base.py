@@ -1,8 +1,10 @@
-from dataclasses import asdict, dataclass, fields, is_dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Literal, Type, TypeVar, Union, get_type_hints
+from typing import Literal
 
+import dacite
 import yaml
+from omegaconf import OmegaConf
 
 
 @dataclass
@@ -176,108 +178,35 @@ class Config(BaseConfig):
     train: TrainConfig
 
 
-T = TypeVar("T")
-
-
-def load_config(
-    config_path: str | Path,
-    model_config_path: str | Path | None = None,
-    config_class: Type[T] = Config,
-) -> T:
+def _merge_dict(source, destination):
+    """Merge 2 dict.
+    - https://stackoverflow.com/a/20666342
     """
-    Load configuration from a YAML file and create nested dataclass instances.
+    for key, value in source.items():
+        if isinstance(value, dict):
+            node = destination.setdefault(key, {})
+            _merge_dict(value, node)
+        else:
+            destination[key] = value
 
-    Args:
-        config_path: Path to the YAML configuration file
-        config_class: Top-level configuration class (defaults to Config)
+    return destination
 
-    Returns:
-        Instance of config_class with all nested dataclasses initialized
 
-    Raises:
-        ValueError: If required configuration fields are missing
-        FileNotFoundError: If the config file doesn't exist
-        yaml.YAMLError: If the YAML file is invalid
-    """
-
-    def create_dataclass_instance(cls: Type[Any], data: dict[str, Any]) -> Any:
-        """
-        Recursively create nested dataclass instances from dictionary data.
-        """
-        if not is_dataclass(cls):
-            return data
-
-        field_types = get_type_hints(cls)
-        kwargs = {}
-
-        for field in fields(cls):
-            field_name = field.name
-            if field_name not in data:
-                raise ValueError(f"Missing required configuration field: {field_name}")
-
-            field_value = data[field_name]
-            field_type = field_types[field_name]
-
-            # Handle Optional/Union types (like str | None)
-            if hasattr(field_type, "__origin__"):
-                if field_type.__origin__ is Union:
-                    if field_value is None:
-                        kwargs[field_name] = None
-                        continue
-                    field_type = field_type.__args__[0]  # Take first type argument
-
-            # If the field is itself a dataclass, recursively create instance
-            if is_dataclass(field_type):
-                kwargs[field_name] = create_dataclass_instance(field_type, field_value)
-            else:
-                kwargs[field_name] = field_value
-
-        return cls(**kwargs)
-
-    # Convert string path to Path object
+def load_config(config_path: Path, cli_extra_args: list[str]) -> Config:
     config_path = Path(config_path)
-    shoehorn = False
-    # Load YAML file
-    try:
-        with open(config_path, "r") as f:
-            config_data = yaml.safe_load(f)
-        # NOTE - dummy patch to avoid adding `config: null` in `train.model`
-        if "config" not in config_data["model"]:
-            shoehorn = True
-            config_data["model"]["config"] = None
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Configuration file not found: {config_path}")
-    except yaml.YAMLError as e:
-        raise yaml.YAMLError(f"Invalid YAML in configuration file: {e}")
-    except Exception as e:
-        raise ValueError(f"Uncaught error: {e}")
-
-    # Create main Config instance
-    config: Config = create_dataclass_instance(config_class, config_data)
-
-    model_config_class = {
-        "pyannet": PyanNetConfig,
-        "pyannet_slim": PyanNetSlimConfig,
-        "whisperidou": WhisperidouConfig,
-        "whisperimax": WhisperimaxConfig,
-        "surgical_whisper": SurgicalWhisperConfig,
-        "hydra_whisper": HydraWhisperConfig,
-        "surgical_hydra": SurgicalHydraConfig,
-    }
-    # NOTE Manually shoehorn ModelConfig as config.model.config
-    if shoehorn:
-        if model_config_path is None:
-            model_config_path = f"src/segma/config/{config.model.name}.yml"
-
-        with open(model_config_path, "r") as f:
-            model_config_data = yaml.safe_load(f)
-
-        config.model.config = create_dataclass_instance(
-            model_config_class[config.model.name], model_config_data
+    # NOTE - load model config
+    with config_path.open("r") as f:
+        config_d = yaml.safe_load(f)
+    # NOTE - add model config to dict
+    model_c_p = Path(f"src/segma/config/{config_d['model']['name']}.yml")
+    if not model_c_p.exists():
+        raise ValueError(
+            f"Model config dict of model {config_d['model']['name']}, could not be loaded"
         )
-    # FIXME - why ?
-    if isinstance(config.model.config, dict):
-        config.model.config = create_dataclass_instance(
-            model_config_class[config.model.name], config.model.config
-        )
-    return config
+    with model_c_p.open("r") as f:
+        config_d["model"]["config"] = yaml.safe_load(f)
+    # NOTE - merge with extra_args_dict
+    config_d = OmegaConf.merge(config_d, OmegaConf.from_cli(cli_extra_args))
+    config_d = OmegaConf.to_object(config_d)
+    # NOTE - attempt to recursively instantiate
+    return dacite.from_dict(data_class=Config, data=config_d)

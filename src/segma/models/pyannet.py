@@ -112,8 +112,6 @@ class PyanNet(BaseSegmentationModel):
         sincnet = self.config.model.config.sincnet
         lstm_c = self.config.model.config.lstm
 
-        self.save_hyperparameters(self.config.model.config.as_dict())
-
         self.sincnet = SincNet(
             sample_rate=self.config.audio.sample_rate, stride=sincnet.stride
         )
@@ -189,8 +187,6 @@ class PyanNetSlim(BaseSegmentationModel):
         )
 
         sincnet = self.config.model.config.sincnet
-
-        self.save_hyperparameters(self.config.model.config.as_dict())
 
         self.sincnet = SincNet(
             sample_rate=self.config.audio.sample_rate, stride=sincnet.stride

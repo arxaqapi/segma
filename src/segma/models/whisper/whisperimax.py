@@ -16,7 +16,6 @@ class WhisperiMax(BaseSegmentationModel):
         super().__init__(
             label_encoder=label_encoder, config=config, weight_loss=weight_loss
         )
-        self.save_hyperparameters(self.config.model.config.as_dict())
 
         self.feature_extractor, self.w_encoder = load_whisper(
             self.config.model.config.encoder

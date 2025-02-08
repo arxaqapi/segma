@@ -82,6 +82,8 @@ class BaseSegmentationModel(pl.LightningModule):
             else None
         )
 
+        self.save_hyperparameters(self.config.as_dict())
+
     def audio_preparation_hook(self, audio_t):
         """should be overwritten in the child class,
         if audio processing is necessary before passing through the model"""

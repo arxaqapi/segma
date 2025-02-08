@@ -66,12 +66,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Resume training, pass in checkpoint path.",
     )
-    parser.add_argument("--run-id", type=str, help="ID of the run")
+    parser.add_argument("--run-id", "--id", type=str, help="ID of the run")
 
     args, extra_args = parser.parse_known_args()
 
     if args.auto_resume and not args.run_id:
-        raise ValueError("When passing auto-resume, please add a run-id")
+        raise ValueError("When passing auto-resume, please add a valid run-id")
     if not args.run_id:
         args.run_id = new_experiment_id()
 

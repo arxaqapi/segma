@@ -77,9 +77,9 @@ if __name__ == "__main__":
 
     config: Config = load_config(config_path=args.config, cli_extra_args=extra_args)
 
-    chkp_path = Path("models")
-    if not chkp_path.exists():
-        chkp_path.mkdir()
+    experiment_path = Path("models")
+    if not experiment_path.exists():
+        experiment_path.mkdir()
 
     if "hydra" in config.model.name:
         l_encoder = MultiLabelEncoder(labels=config.data.classes)
@@ -125,6 +125,13 @@ if __name__ == "__main__":
     )
 
     save_path = Path("models") / args.run_id
+    save_path.mkdir(parents=True, exist_ok=True)
+    config.save(save_path / "config.yml")
+
+    chkp_path = save_path / "checkpoints"
+    chkp_path.mkdir(parents=True, exist_ok=True)
+    last_ckpt = chkp_path / "last.ckpt"
+
     print("[log] - use WandbLogger")
     logger = WandbLogger(
         project=config.wandb.project,
@@ -133,16 +140,10 @@ if __name__ == "__main__":
         log_model=False if config.wandb.offline else "all",
         tags=args.tags,
         offline=config.wandb.offline,
-        resume="must" if args.auto_resume else "never",
+        resume="must" if args.auto_resume and last_ckpt.exists() else None,  # "never",
     )
     logger.experiment.config.update(config)
     # save_path = save_path.with_stem(save_path.stem + f"-{logger.experiment.id}")
-
-    save_path.mkdir(parents=True, exist_ok=True)
-    config.save(save_path / "config.yml")
-
-    chkp_path = save_path / "checkpoints"
-    chkp_path.mkdir(parents=True, exist_ok=True)
 
     model_checkpoint = ModelCheckpoint(
         monitor=monitor,
@@ -188,7 +189,6 @@ if __name__ == "__main__":
         model = torch.compile(model)
 
     print(f"[log @ {datetime.now().strftime('%Y%m%d_%H%M')}] - started training")
-    last_ckpt = chkp_path / "last.ckpt"
     if args.auto_resume and last_ckpt.exists():
         print("[log] - fit with resuming")
         trainer.fit(model, datamodule=dm, ckpt_path=last_ckpt)

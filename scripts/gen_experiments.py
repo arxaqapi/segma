@@ -15,7 +15,7 @@ def meta_run_gen(
 
 if __name__ == "__main__":
     base_c = [
-        "wandb.offline=false",
+        "wandb.offline=true",
         "wandb.project='Segma scale'",
         "wandb.name=train-SH-sub-data",
     ]

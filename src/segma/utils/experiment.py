@@ -175,7 +175,7 @@ source .venv/bin/activate
 if [ ! -f {self.exp_path}/"finished" ] ; then
     sbatch --dependency=afterany:$SLURM_JOBID {self.run_script_p}
 else
-    exit(0)
+	exit 0
 fi
 """,
             f"""# If training is not canceled due to time out, write the finished file to stop the loop.

@@ -103,6 +103,27 @@ def test_Config_SurgicalWhisperConfig():
     assert hasattr(cfg.model.config, "classifier")
 
 
+def test_load_config_extra_args():
+    cfg = load_config(
+        config_path="tests/sample/temp_config_surgical_whisper.yml",
+        cli_extra_args=[
+            "wandb.offline=true",
+            "audio.chunk_duration_s=6.0",
+            "data.dataset_multiplier=0.2",
+            "model.config.encoder_layers=[1,3]",
+            "model.config.reduction=average",
+            "train.extra_val_metrics=[loss]",
+        ],
+    )
+
+    assert cfg.wandb.offline
+    assert cfg.audio.chunk_duration_s == 6.0
+    assert cfg.data.dataset_multiplier == 0.2
+    assert cfg.model.config.encoder_layers == [1, 3]
+    assert cfg.model.config.reduction == "average"
+    assert cfg.train.extra_val_metrics == ["loss"]
+
+
 def test_cleanup():
     # NOTE - cleanup
     from pathlib import Path

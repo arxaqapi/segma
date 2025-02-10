@@ -35,7 +35,7 @@ def test_load_config():
     assert cfg.data.classes == ["KCHI", "OCH", "MAL", "FEM"]
     assert cfg.data.dataset_multiplier == 1.0
 
-    assert cfg.audio.chunk_duration_s == 2.0
+    assert cfg.audio.chunk_duration_s == 4.0
     assert cfg.audio.sample_rate == 16_000
     assert not cfg.audio.strict_frames
 
@@ -46,7 +46,7 @@ def test_load_config():
 
     assert cfg.train.lr == 1e-3
     assert cfg.train.max_epochs == 100
-    assert cfg.train.validation_metric == "auroc"
+    assert cfg.train.validation_metric == "loss"
     assert cfg.train.profiler is None
     assert cfg.train.dataloader.num_workers == 8
     assert cfg.train.scheduler.patience == 3

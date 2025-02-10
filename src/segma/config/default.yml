@@ -14,22 +14,23 @@ data:
 
 # necessary info for pred/eval
 audio:
-  chunk_duration_s: 2.0
+  chunk_duration_s: 4.0
   sample_rate: 16_000
   # True if pyannet, False if Whisper
   strict_frames: false
 
 model:
-  name: whisperidou
+  name: surgical_hydra
 
 train:
   lr: 0.001
   batch_size: 32
   max_epochs: 100
-  validation_metric: auroc
+  # validation_metric: auroc
+  validation_metric: loss
   # [loss, partial_loss, label_loss, f1_score, auroc, roc]
   # [loss (includes label_loss), f1_score]
-  extra_val_metrics: [f1_score, loss, roc]
+  extra_val_metrics: [loss, f1_score]
   # simple or advanced (python <= 3.11)
   profiler: null
 

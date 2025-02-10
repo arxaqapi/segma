@@ -37,7 +37,7 @@ train:
   profiler: null
 
   dataloader:
-    num_workers: 12
+    num_workers: 8
 
   scheduler:
     patience: 3

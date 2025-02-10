@@ -76,9 +76,13 @@ def test_Config_as_dict():
 
 
 def test_Config_save_load():
+    """Ensures that Config.save and Config.load works and that a complete config
+    is correctly loaded.
+    """
     cfg = load_config(
         config_path="tests/sample/temp_config_whisperidou.yml",
     )
+    cfg.model.config.encoder = "whisper_large_encoder"
     temp_p = Path("tests/_temp.yml")
     cfg.save(temp_p)
 

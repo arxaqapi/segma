@@ -1,4 +1,3 @@
-
 wandb:
   offline: false
   project: Segma debug

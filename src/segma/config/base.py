@@ -200,14 +200,15 @@ def load_config(config_path: Path | str, cli_extra_args: list[str] = []) -> Conf
     with config_path.open("r") as f:
         config_d = yaml.safe_load(f)
 
-    # NOTE - add model config to dict
-    model_c_p = Path(f"src/segma/config/{config_d['model']['name']}.yml")
-    if not model_c_p.exists():
-        raise ValueError(
-            f"Model config dict of model {config_d['model']['name']}, could not be loaded"
-        )
-    with model_c_p.open("r") as f:
-        config_d["model"]["config"] = yaml.safe_load(f)
+    # NOTE - add model config to dict if model.config is empty
+    if "config" not in config_d["model"].keys():
+        model_c_p = Path(f"src/segma/config/{config_d['model']['name']}.yml")
+        if not model_c_p.exists():
+            raise ValueError(
+                f"Model config dict of model {config_d['model']['name']}, could not be loaded"
+            )
+        with model_c_p.open("r") as f:
+            config_d["model"]["config"] = yaml.safe_load(f)
 
     # NOTE - merge with extra_args_dict
     config_d = OmegaConf.merge(config_d, OmegaConf.from_cli(cli_extra_args))

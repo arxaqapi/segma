@@ -334,7 +334,8 @@ class AudioSegmentationDataset(IterableDataset):
         )
         # REVIEW - file error with iterable dataset len that has to be an integer
         return int(
-            max(
+            self.config.data.dataset_multiplier
+            * max(
                 ceil(total_annotated_duration_s / self.config.audio.chunk_duration_s),
                 self.config.train.batch_size,
             )

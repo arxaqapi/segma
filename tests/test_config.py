@@ -33,6 +33,7 @@ def test_load_config():
 
     assert cfg.data.dataset_path == "data/baby_train"
     assert cfg.data.classes == ["KCHI", "OCH", "MAL", "FEM"]
+    assert cfg.data.dataset_multiplier == 1.0
 
     assert cfg.audio.chunk_duration_s == 2.0
     assert cfg.audio.sample_rate == 16_000

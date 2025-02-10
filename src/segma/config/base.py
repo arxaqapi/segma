@@ -46,6 +46,7 @@ class WandbConfig(BaseConfig):
 class DataConfig(BaseConfig):
     dataset_path: str
     classes: list[str]
+    dataset_multiplier: float = 1.0
 
 
 @dataclass

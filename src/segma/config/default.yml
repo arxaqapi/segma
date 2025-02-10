@@ -18,7 +18,7 @@ audio:
   chunk_duration_s: 2.0
   sample_rate: 16_000
   # True if pyannet, False if Whisper
-  strict_frames: true
+  strict_frames: false
 
 model:
   name: whisperidou

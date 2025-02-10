@@ -37,7 +37,7 @@ def test_load_config():
 
     assert cfg.audio.chunk_duration_s == 2.0
     assert cfg.audio.sample_rate == 16_000
-    assert cfg.audio.strict_frames
+    assert not cfg.audio.strict_frames
 
     assert cfg.model.name == "whisperidou"
     assert cfg.model.config.encoder == "whisper_tiny_encoder"

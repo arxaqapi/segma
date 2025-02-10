@@ -3,6 +3,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
+from segma.config import load_config
+
 WORD_LIST = ("scripts/extra/names.txt", 3198)
 
 
@@ -11,7 +13,7 @@ def _get_random_word(word_list_p: Path | str, n_words: int) -> str:
         return f.readlines()[random.randint(0, n_words)].strip()
 
 
-def new_experiment_id():
+def new_experiment_id() -> str:
     e_id = datetime.now().strftime("%y%m%d-%H%M%S-")
     return e_id + _get_random_word(*WORD_LIST)
 
@@ -23,7 +25,7 @@ class Experiment:
         args: list[str] = [],
         tags: list[str] = [],
     ) -> None:
-        self.base = base
+        self.base = Path(base)
         self.run_id = new_experiment_id()
 
         i = 0
@@ -37,6 +39,9 @@ class Experiment:
 
         self.args = args
         self.tags = tags
+
+        # NOTE - try to load config, such that there are no suprises during the run
+        load_config("src/segma/config/default.yml", cli_extra_args=args)
 
     def gen(
         self,
@@ -81,7 +86,7 @@ class Experiment:
         return self.run_script_p
 
     @property
-    def exp_path(self):
+    def exp_path(self) -> Path:
         """Full Path to the experiment folder"""
         return self.base / self.run_id
 
@@ -89,7 +94,7 @@ class Experiment:
     def run_script_p(self) -> Path:
         return self.exp_path / "run.sh"
 
-    def _slurm_oberon(self, auto_train: bool):
+    def _slurm_oberon(self, auto_train: bool) -> str:
         """Generate an Oberon compatible run script with auto-requeue."""
         return f"""#!/bin/bash
 #!/bin/bash
@@ -111,7 +116,7 @@ module load uv
 {self._train_instructions(auto_train)}
 """
 
-    def _slurm_jz(self, target: Literal["v100", "a100"], auto_train: bool):
+    def _slurm_jz(self, target: Literal["v100", "a100"], auto_train: bool) -> str:
         """Generate a Jean-Zay compatible run script with auto-requeue.
 
         - http://www.idris.fr/jean-zay/gpu/jean-zay-gpu-exec_partition_slurm.html
@@ -163,7 +168,7 @@ source .venv/bin/activate
 {self._auto_train_instructions()[1] if auto_train else ""}
 """
 
-    def _auto_train_instructions(self):
+    def _auto_train_instructions(self) -> tuple[str, str]:
         return (
             "#auto_train automatically restarts if there are checkpoints\n"
             + f'if [ ! -f {self.exp_path}/"finished" ] ; then\n'
@@ -176,7 +181,7 @@ source .venv/bin/activate
             + f"touch {self.exp_path}/finished",
         )
 
-    def _train_instructions(self, auto_train: bool):
+    def _train_instructions(self, auto_train: bool) -> str:
         return f"""srun python -u scripts/{"auto_train" if auto_train else "train"}.py \\
     --config src/segma/config/default.yml \\
     --tags {" ".join(self.tags)} \\

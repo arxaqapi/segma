@@ -136,6 +136,7 @@ module load uv
                 raise NotImplementedError
         # REVIEW - use default config or generate a new one ? (a backup is made by the train script)
         #        --config {self.exp_path}/config.yml \
+        extra_modules_s = "\n".join(extra_modules)
         return f"""#!/bin/bash
 #SBATCH --account=hmx@{target}
 #SBATCH --job-name=segma_train
@@ -153,7 +154,7 @@ module load uv
 #SBATCH --output={self.exp_path}/%j-%x-log.txt
 
 module purge
-{"\n".join(extra_modules)}
+{extra_modules_s}
 
 module load python/3.11.5
 module load ffmpeg/6.1.1
@@ -170,21 +171,27 @@ source .venv/bin/activate
 
     def _auto_train_instructions(self) -> tuple[str, str]:
         return (
-            "#auto_train automatically restarts if there are checkpoints\n"
-            + f'if [ ! -f {self.exp_path}/"finished" ] ; then\n'
-            + f"	sbatch --dependency=afterany:$SLURM_JOBID {self.run_script_p}\n"
-            + "else\n"
-            + "	exit(0)\n"
-            + "fi\n",
-            "# If training is not canceled due to time out, write the finished file to stop the loop.\n"
-            + f"""echo "Run finished, creating 'finished' file at '{self.exp_path}/'\n"""
-            + f"touch {self.exp_path}/finished",
+            f"""#auto_train automatically restarts if there are checkpoints
+if [ ! -f {self.exp_path}/"finished" ] ; then
+    sbatch --dependency=afterany:$SLURM_JOBID {self.run_script_p}
+else
+    exit(0)
+fi
+""",
+            f"""# If training is not canceled due to time out, write the finished file to stop the loop.
+echo "Run finished, creating 'finished' file at '{self.exp_path}/'"
+touch {self.exp_path}/finished
+""",
         )
 
     def _train_instructions(self, auto_train: bool) -> str:
-        return f"""srun python -u scripts/{"auto_train" if auto_train else "train"}.py \\
-    --config src/segma/config/default.yml \\
-    --tags {" ".join(self.tags)} \\
-    --auto-resume \\
-	--run-id {self.run_id} \\
-    {" ".join(self.args)}"""
+        return " ".join(
+            [
+                f"srun python -u scripts/{'auto_train' if auto_train else 'train'}.py",
+                "--config src/segma/config/default.yml",
+                f"--tags {' '.join(self.tags)}",
+                "--auto-resume",
+                f"--run-id {self.run_id}",
+                " ".join(self.args),
+            ]
+        )

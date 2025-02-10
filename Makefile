@@ -33,9 +33,9 @@ c clean:
 	rm -rf .ruff_cache
 	rm -rf __pycache__
 	find src -name "__pycache__" -type d -exec rm -rf {} +
-	rm -rf lightning_logs checkpoints wandb
 	rm -rf *.tar.gz
 	rm -rf .DS_STORE
+# rm -rf lightning_logs checkpoints wandb
 
 
 # Slurm

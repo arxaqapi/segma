@@ -66,6 +66,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Resume training, pass in checkpoint path.",
     )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="experiments",
+        help="Output path of the model artifacts.",
+    )
     parser.add_argument("--run-id", "--id", type=str, help="ID of the run")
 
     args, extra_args = parser.parse_known_args()
@@ -77,7 +83,7 @@ if __name__ == "__main__":
 
     config: Config = load_config(config_path=args.config, cli_extra_args=extra_args)
 
-    experiment_path = Path("models")
+    experiment_path = Path(args.output)
     if not experiment_path.exists():
         experiment_path.mkdir()
 
@@ -124,7 +130,7 @@ if __name__ == "__main__":
         flush=True,
     )
 
-    save_path = Path("models") / args.run_id
+    save_path = experiment_path / args.run_id
     save_path.mkdir(parents=True, exist_ok=True)
     config.save(save_path / "config.yml")
 
@@ -199,7 +205,7 @@ if __name__ == "__main__":
     (chkp_path / "best.ckpt").symlink_to(
         Path(model_checkpoint.best_model_path).absolute()
     )
-    static_p = Path("models/last")
+    static_p = experiment_path / "last"
     static_p.mkdir(parents=True, exist_ok=True)
     bm_static_p = static_p / "best.ckpt"
     bm_static_p.unlink(missing_ok=True)

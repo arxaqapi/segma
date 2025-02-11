@@ -78,9 +78,13 @@ class Experiment:
         with self.run_script_p.open("w") as f:
             f.write(script_content)
 
+        # NOTE - 4. write pred_eval script
+        with (self.exp_path / "pred_eval.sh").open("w") as f:
+            f.write(self._pred_eval())
+
         if not self.run_script_p.exists():
             raise RuntimeError(
-                f"Something wen wrong generating the {self.run_script_p.parts[-1]} script at path: `{self.run_script_p.parent}`."
+                f"Something went wrong generating the {self.run_script_p.parts[-1]} script at path: `{self.run_script_p.parent}`."
             )
 
         return self.run_script_p
@@ -101,7 +105,6 @@ class Experiment:
 #SBATCH --job-name=segma_train             # Job name
 #SBATCH --partition=gpu                    # Take a node from the 'gpu' partition
 #SBATCH --export=ALL                       # Export your environment to the compute node
-##SBATCH --exclude=puck5
 #SBATCH --gres=gpu:1
 #SBATCH --mem=100G                         # ram
 #SBATCH --cpus-per-task=24
@@ -195,3 +198,40 @@ touch {self.exp_path}/finished
                 " ".join(self.args),
             ]
         )
+
+    def _pred_eval(
+        self,
+        eval_ds: str = "baby_train",
+        ckpt: str | Path = "last",
+        out_path: str = "out",
+    ) -> str:
+        ckpt = Path(ckpt).with_suffix(".ckpt")
+        return f"""#!/bin/bash
+#SBATCH --job-name=segma_pred_eval
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
+#SBATCH --mem=40G
+#SBATCH --cpus-per-task=4
+#SBATCH --time=20:00:00
+#SBATCH --output={self.exp_path}/%j-%x-log-pred_eval.txt
+
+# 1. predict on data
+source .venv/bin/activate
+module load audio-tools
+
+python -u scripts/predict.py \
+    --config {self.exp_path}/config.yml \
+    --uris data/{eval_ds}/test.txt \
+    --wavs data/{eval_ds}/wav \
+    --ckpt {self.exp_path}/checkpoints/{ckpt} \
+    --output {self.exp_path}/{out_path}
+
+
+# 2. evaluate predictions
+source .venv_eval/bin/activate
+
+python -u scripts/evaluate.py \
+    --gt data/{eval_ds}/rttm \
+    --pred {self.exp_path}/{out_path}/rttm \
+    --config {self.exp_path}/config.yml
+"""

@@ -45,10 +45,10 @@ it:
 	srun --export=ALL --mem=60G --time=24:00:00 --partition=gpu --gres=gpu:1 --job-name=segma_it --pty bash
 
 
-# fix file .venv_inference/lib/python3.12/site-packages/pyannote/database/util.py
+# fix file .venv_eval/lib/python3.12/site-packages/pyannote/database/util.py
 # by replacing all `delim_whitespace=True` with `sep=" "`
 fix-pd:
-	sed -i 's/delim_whitespace=True/sep=" "/g' .venv_inference/lib/python3.12/site-packages/pyannote/database/util.py
+	sed -i 's/delim_whitespace=True/sep=" "/g' .venv_eval/lib/python3.12/site-packages/pyannote/database/util.py
 
 
 line-count:

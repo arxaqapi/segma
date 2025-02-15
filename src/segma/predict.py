@@ -11,7 +11,30 @@ from segma.models.base import BaseSegmentationModel
 from segma.structs.interval import Interval, Intervals
 from segma.utils.conversions import frames_to_milliseconds
 from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
-from segma.utils.receptive_fields import rf_end_i, rf_start_i
+
+
+def write_logits_to_disk(logits: list[np.ndarray], logits_p: Path | str) -> None:
+    """Save the logits to disk."""
+    logits_p = Path(logits_p)
+    logits_p.parent.mkdir(parents=True, exist_ok=True)
+
+    logits_a = np.stack(logits, axis=0) if len(logits) > 1 else np.array(logits[0])
+
+    with logits_p.open("wb") as bf:
+        np.save(bf, logits_a)
+
+
+def load_logits_from_disk(logits_p: Path | str) -> np.ndarray:
+    """Loads np array to memory."""
+    logits_p = Path(logits_p)
+    with logits_p.open("rb") as bf:
+        logits_a = np.load(bf)
+    return logits_a
+
+
+def predict_from_logits(logits: np.ndarray, output_p: Path, config: Config):
+    """Given a stack of logits of the shape (batch, output_dim, n_labels), perform prediction."""
+    raise NotImplementedError
 
 
 def write_intervals(intervals: Intervals, audio_path: Path, output_p: Path):
@@ -36,92 +59,13 @@ def write_intervals(intervals: Intervals, audio_path: Path, output_p: Path):
             aa_f.write(aa.write() + "\n")
 
 
-def prediction(audio_path: Path, model: BaseSegmentationModel, output_p: Path):
-    """Takes a path to an audio file, a trained model and output folder,
-    perform frame-level inference, stitches everything together
-    and saves `.aa`and `.rttm` files to the output folder and their corresponding subfolders.
-
-    Args:
-        audio_path (Path): Path to a collection of `.wav` files.
-        model (BaseSegmentationModel): Trained model used to perform inference.
-        output_p (Path): Output folder that will contain the segmentation files.
-    """
-    raise NotImplementedError(
-        "This method is no longer to be used, please refer to `sliding_prediction` instead."
-    )
-    assert audio_path.exists()
-
-    audio_t, _sr = torchaudio.load(audio_path.resolve())
-    assert _sr == 16_000
-
-    # downmix to mono
-    if audio_t.shape[0] > 1:
-        audio_t = audio_t.mean(dim=0)
-    audio_t = audio_t.squeeze()
-
-    # create chunks of size chunk_size by padding and reshaping the audio
-    n_valid_frames = len(audio_t)
-    chunck_size_f = 2 * 16_000  # _sr
-
-    # if < 1 pad pad to match batch, if > 1 pad an extra batch
-    max_number_of_chunks = n_valid_frames / chunck_size_f
-    missing_n_frames = ceil(max_number_of_chunks) * chunck_size_f - n_valid_frames
-    if missing_n_frames > 0:
-        audio_t = torch.nn.functional.pad(
-            audio_t, pad=(0, missing_n_frames), mode="constant", value=0
-        )
-    # (batch, 32_000) | batch_t[-1][-missing_n_frames] = first padded value
-    batch_t = audio_t.reshape((ceil(max_number_of_chunks), chunck_size_f))
-
-    # NOTE - pass batch_t through model
-    # predicted output, to be processed
-    batch_t = model.audio_preparation_hook(batch_t.cpu().numpy())
-    batch_t = torch.tensor(batch_t)
-
-    # (batch, windows, n_labels)
-    model.eval()
-    with torch.no_grad():
-        output = model(batch_t)
-
-    all_intervals = Intervals()
-    for batch_i, batch in enumerate(output):
-        # batch: (windows, n_labels)
-        # Zip with prediction windows. or get them through computation (clip)
-
-        # NOTE - for each window, create an interval per label
-        # merge intervals by adding them to the Intervals structure
-        for w_i, window in enumerate(batch):
-            # windows: (n_labels, )
-            frame_start = batch_i * chunck_size_f + rf_start_i(
-                w_i, model.conv_settings.strides, model.conv_settings.paddings
-            )
-            frame_end = batch_i * chunck_size_f + rf_end_i(
-                w_i,
-                model.conv_settings.kernels,
-                model.conv_settings.strides,
-                model.conv_settings.paddings,
-            )
-            found_labels = model.label_encoder.inv_transform(window.argmax().item())
-
-            for label in found_labels:
-                corresponding_interval: Interval = (frame_start, frame_end, label)
-                all_intervals.add(corresponding_interval)
-
-    # TODO remove x last prediction if audio was padded
-    if missing_n_frames > 0:
-        for interval in all_intervals:
-            # remove from interlap / create new interlap object
-            if interval[0] > n_valid_frames - missing_n_frames:
-                pass
-                # raise NotImplementedError
-
-    # NOTE - generate & write; aa & rttms
-    write_intervals(intervals=all_intervals, audio_path=audio_path, output_p=output_p)
-
-
 # TODO - add chunck_size_f as parameter of function
 def sliding_prediction(
-    audio_path: Path, model: BaseSegmentationModel, output_p: Path, config: Config
+    audio_path: Path,
+    model: BaseSegmentationModel,
+    output_p: Path,
+    config: Config,
+    save_logits: bool = False,
 ):
     """do not open audio entirely
     - perform slide-wise"""
@@ -147,6 +91,9 @@ def sliding_prediction(
     reference_windows[-1][-1] = chunck_size_f
 
     all_intervals = Intervals()
+
+    if save_logits:
+        raw_logits = []
 
     for meta_batch_i in range(max_meta_batches):
         start_i = meta_batch_i * meta_b_size
@@ -180,11 +127,25 @@ def sliding_prediction(
 
         # NOTE - pass batch through model
         with torch.no_grad():
-            output_t = model(
+            output_t: dict[str, torch.Tensor] | torch.Tensor = model(
                 batch_t.to(
                     torch.device("mps" if torch.backends.mps.is_available() else "cuda")
                 )
             )
+
+        # NOTE - takes the output tensor and stacks it into a list of np.array
+        if save_logits and isinstance(model.label_encoder, MultiLabelEncoder):
+            raw_logits.append(
+                np.stack(
+                    [
+                        head_output_t.detach().cpu().numpy().squeeze()
+                        for head_output_t in output_t.values()
+                    ],
+                    axis=-1,
+                )
+            )
+        elif save_logits and isinstance(model.label_encoder, PowersetMultiLabelEncoder):
+            raw_logits.append(output_t)
 
         # NOTE - only for MultiLabel models: x * (30, 99, 1)
         # TODO handle using label_encoder (thats its usecase)
@@ -222,7 +183,7 @@ def sliding_prediction(
                 for pred, (w_start, w_end) in zip(predictions, reference_windows):
                     offset = start_i + batch_i * chunck_size_f
                     frame_start = w_start + offset
-                    # FIXME - Intervals needs to be fixed
+                    # FIXME - Intervals needs to be fixed instead of forcing the merge with a + 1
                     frame_end = w_end + offset + 1
                     # NOTE - skip padded section
                     if n_frames_to_pad > 0 and frame_start > (end_i - n_frames_to_pad):
@@ -239,6 +200,13 @@ def sliding_prediction(
 
     # NOTE - generate & write; aa & rttms
     write_intervals(intervals=all_intervals, audio_path=audio_path, output_p=output_p)
+
+    # NOTE - save logits to disk
+    if save_logits:
+        print(f"[log] - saving logits to disk under '{output_p / 'logits'}'")
+        write_logits_to_disk(
+            logits=raw_logits, logits_p=output_p / "logits" / audio_path.stem
+        )
 
 
 def gen_bounds(

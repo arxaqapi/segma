@@ -29,6 +29,12 @@ if __name__ == "__main__":
         "--output",
         help="Output Path to the folder that will contain the final predictions.",
     )
+    parser.add_argument(
+        "--save-logits",
+        "--save_logits",
+        action="store_true",
+        help="If the prediction scripts saves the logits to disk, can be memory intensive.",
+    )
 
     args = parser.parse_args()
     args.wavs = Path(args.wavs)
@@ -72,13 +78,23 @@ if __name__ == "__main__":
         for uri in uris:
             wav_f = (args.wavs / uri).with_suffix(".wav")
             print(f"[log] - running inference for file: '{wav_f.stem}'")
-            # prediction(wav_f, model=model, output_p=args.output)
-            sliding_prediction(wav_f, model=model, output_p=args.output, config=cfg)
+            sliding_prediction(
+                wav_f,
+                model=model,
+                output_p=args.output,
+                config=cfg,
+                save_logits=args.save_logits,
+            )
     else:
         for wav_f in args.wavs.glob("*.wav"):
             print(f"[log] - running inference for file: '{wav_f.stem}'")
-            # prediction(wav_f, model=model, output_p=args.output)
-            sliding_prediction(wav_f, model=model, output_p=args.output, config=cfg)
+            sliding_prediction(
+                wav_f,
+                model=model,
+                output_p=args.output,
+                config=cfg,
+                save_logits=args.save_logits,
+            )
 
     # NOTE - symlink to models/last/[rttm|aa]
     static_p = Path("models/last")

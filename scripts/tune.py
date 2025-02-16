@@ -1,4 +1,5 @@
 import argparse
+from collections import defaultdict
 from pathlib import Path
 
 import optuna
@@ -83,10 +84,11 @@ def tune(
     Returns:
         optuna.trial.FrozenTrial: Best found trial.
     """
-    
+
     assert (dataset_to_tune_on / "val.txt").exists()
-    # NOTE - load GT validation RTTMs
-    # REVIEW - ONLY UNE ON THE VALIDATION SET AND NOT THE TEST SET !!!
+    # NOTE - load GT validation RTTMs, ensure only the validation set is used here.
+    if not (dataset_to_tune_on / "val.txt").exists():
+        raise ValueError("File `val.txt` is not available in the considered dataset.")
     validation_gt_rttm = load_dataset_gt(
         uri_list_p=dataset_to_tune_on / "val.txt", rttm_p=dataset_to_tune_on / "rttm"
     )
@@ -140,6 +142,26 @@ def tune(
     return study.best_trial
 
 
+def treshold_dict_to_optuna(
+    treshold_p_dict: dict[str, dict[str, float]], sep: str = "."
+) -> dict[str, float]:
+    params: dict[str, float] = {}
+    for label, tresholds in treshold_p_dict.items():
+        for treshold_name, value in tresholds.items():
+            params[".".join((label, treshold_name))] = value
+    return params
+
+
+def optuna_out_to_treshold_d(
+    optuna_param_dict: dict[str, float], sep: str = "."
+) -> dict[str, dict[str, float]]:
+    params = defaultdict(dict)
+    for value_name, value in optuna_param_dict.items():
+        label, tresh_name = value_name.split(sep)
+        params[label][tresh_name] = value
+    return dict(params)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -183,9 +205,11 @@ if __name__ == "__main__":
         dataset_to_tune_on=args.dataset,
     )
 
+    tresholds = optuna_out_to_treshold_d(best_trial.params)
+
     with (args.output / "tresholds.yml").open("w") as f:
-        yaml.safe_dump(best_trial.params, f)
+        yaml.safe_dump(tresholds, f)
 
     print(
-        f"[log] - found best trial with value: {best_trial.value} and parameters: \n{best_trial.params=}"
+        f"[log] - found best trial with value: {best_trial.value} and parameters: \n{tresholds=}"
     )

@@ -148,7 +148,7 @@ def treshold_dict_to_optuna(
     params: dict[str, float] = {}
     for label, tresholds in treshold_p_dict.items():
         for treshold_name, value in tresholds.items():
-            params[".".join((label, treshold_name))] = value
+            params[sep.join((label, treshold_name))] = value
     return params
 
 

@@ -27,7 +27,7 @@ uv run scripts/predict.py \
 
 
 # 2. evaluate predictions
-source .venv_inference/bin/activate
+source .venv_eval/bin/activate
 
 python scripts/evaluate.py \
     --gt data/baby_train/rttm \

@@ -125,6 +125,7 @@ def sliding_prediction(
     output_p: Path,
     config: Config,
     save_logits: bool = False,
+    tresholds: dict[str, dict[str, float]] | None = None,
 ):
     """do not open audio entirely
     - perform slide-wise"""
@@ -212,7 +213,15 @@ def sliding_prediction(
             for key, head_output_t in output_t.items():
                 head_label = key.removeprefix("linear_head_")
                 for batch_i, batch in enumerate(head_output_t):
-                    label_prediction = (batch > 0.5).int()
+                    if tresholds is not None:
+                        # NOTE - treshold batch
+                        label_prediction = (
+                            (batch >= tresholds[head_label]["lower_bound"])
+                            & (batch <= tresholds[head_label]["upper_bound"])
+                        ).int()
+                    else:
+                        # NOTE - use base value of 0.5 for tresholding
+                        label_prediction = (batch > 0.5).int()
                     for pred, raw_logit, (w_start, w_end) in zip(
                         label_prediction, batch, reference_windows
                     ):

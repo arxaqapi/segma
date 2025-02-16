@@ -1,3 +1,4 @@
+from collections import defaultdict
 from math import ceil
 from pathlib import Path
 
@@ -17,16 +18,13 @@ from segma.utils.encoders import (
 )
 
 
-def write_logits_to_disk(logits: list[np.ndarray], logits_p: Path | str) -> None:
+def write_logits_to_disk(logits: np.ndarray, logits_p: Path | str) -> None:
     """Save the logits to disk."""
     logits_p = Path(logits_p)
     logits_p.parent.mkdir(parents=True, exist_ok=True)
 
-    logits_a = np.concat(logits, axis=0) if len(logits) > 1 else np.array(logits[0])
-    # logits_a = np.stack(logits, axis=0) if len(logits) > 1 else np.array(logits[0])
-
     with logits_p.with_suffix(".npy").open("wb") as bf:
-        np.save(bf, logits_a)
+        np.save(bf, logits)
 
 
 def load_logit_from_disk(logits_p: Path | str) -> np.ndarray:
@@ -48,13 +46,10 @@ def predict_all_logits(
     logits: dict[str, np.ndarray],
     tresholds: dict[str, dict[str, float]],
     label_encoder: LabelEncoder,
-    config: Config,
 ) -> dict[str, list[AudioAnnotation]]:
     """Given a dict that maps uris to logits, perform prediction for each loaded logit and return a dict that maps uris to predictions."""
     return {
-        uri: predict_from_logits_with_tresholds(
-            logit, uri, tresholds, label_encoder, config
-        )
+        uri: predict_from_logits_with_tresholds(logit, uri, tresholds, label_encoder)
         for uri, logit in logits.items()
     }
 
@@ -64,49 +59,27 @@ def predict_from_logits_with_tresholds(
     uri: str,
     tresholds: dict[str, dict[str, float]],
     label_encoder: LabelEncoder,
-    config: Config,
 ) -> list[AudioAnnotation]:
     """Given a stack of logits of the shape (batch, output_dim, n_labels), perform prediction respecting the given tresholds."""
     assert isinstance(label_encoder, MultiLabelEncoder)
 
     all_intervals = Intervals()
 
-    chunck_size_f = int(config.audio.chunk_duration_s) * config.audio.sample_rate
-    reference_windows = gen_bounds(
-        max_value=chunck_size_f, clip_values=(0, chunck_size_f)
-    )[: logits.shape[1]]
-
-    for batch_i, chunk in enumerate(logits):
-        # logits: (batch, n_features, out)
-        # chunk: (n_features, n_labels)
-
-        for preds, (w_start, w_end) in zip(chunk, reference_windows):
-            # preds: (n_labels,)
-            offset = batch_i * chunck_size_f
-            frame_start = w_start + offset
-            frame_end = w_end + offset + 1
-            # TODO - skip padded section
-
-            # TODO - implement label extraction and thresholding
-            # label_logit = 1 if tresholds[label]["lower_bound"] <= val <= tresholds[label]["upper_bound"] else 0
-            preds_d = {
-                label: 1
-                if tresholds[label]["lower_bound"]
+    for start_f, end_f, logit in logits:
+        # logit: (4,)
+        for label_logit, label in zip(logit, label_encoder.base_labels):
+            if (
+                tresholds[label]["lower_bound"]
                 <= label_logit
                 <= tresholds[label]["upper_bound"]
-                else 0
-                for label_logit, label in zip(preds, label_encoder.base_labels)
-                # label: label_logit for label_logit, label in zip(chunk, label_encoder.base_labels)
-            }
-            # found_labels = [] if pred == 0 else [head_label]
-            for label, tresholded_value in preds_d.items():
-                if tresholded_value:
-                    corresponding_interval: Interval = (
-                        frame_start,
-                        frame_end,
-                        label,
-                    )
-                    all_intervals.add(corresponding_interval)
+            ):
+                corresponding_interval: Interval = (
+                    start_f,
+                    end_f,
+                    label,
+                )
+                all_intervals.add(corresponding_interval)
+
     return interval_to_aa(all_intervals, uri)
 
 
@@ -179,7 +152,16 @@ def sliding_prediction(
     all_intervals = Intervals()
 
     if save_logits:
-        raw_logits = []
+        # NOTE - define logits datatype
+        mem_logit_dt = np.dtype(
+            [
+                ("start_f", np.int32),
+                ("end_f", np.int32),
+                ("predictions", np.float32, (len(model.label_encoder.base_labels),)),
+            ]
+        )
+        # list of numpy array, one line per frame prediction ()
+        raw_logits: dict[tuple[int, int], list[float]] = defaultdict(list)
 
     for meta_batch_i in range(max_meta_batches):
         start_i = meta_batch_i * meta_b_size
@@ -222,29 +204,17 @@ def sliding_prediction(
                 for key, head_output_t in output_t.items():
                     output_t[key] = torch.nn.functional.sigmoid(head_output_t)
 
-        # NOTE - takes the output tensor and stacks it into a list of np.array
-        if save_logits and isinstance(model.label_encoder, MultiLabelEncoder):
-            raw_logits.append(
-                np.stack(
-                    [
-                        head_output_t.detach().cpu().numpy().squeeze()
-                        for head_output_t in output_t.values()
-                    ],
-                    axis=-1,
-                )
-            )
-        elif save_logits and isinstance(model.label_encoder, PowersetMultiLabelEncoder):
-            raw_logits.append(output_t)
-
         # NOTE - only for MultiLabel models: x * (30, 99, 1)
         # TODO handle using label_encoder (thats its usecase)
         if isinstance(model.label_encoder, MultiLabelEncoder):
+            # NOTE - one pass per label
+            # mb_logits: dict[tuple[int, int], list[float]] = defaultdict(list)
             for key, head_output_t in output_t.items():
                 head_label = key.removeprefix("linear_head_")
                 for batch_i, batch in enumerate(head_output_t):
                     label_prediction = (batch > 0.5).int()
-                    for pred, (w_start, w_end) in zip(
-                        label_prediction, reference_windows
+                    for pred, raw_logit, (w_start, w_end) in zip(
+                        label_prediction, batch, reference_windows
                     ):
                         offset = start_i + batch_i * chunck_size_f
                         frame_start = w_start + offset
@@ -263,6 +233,11 @@ def sliding_prediction(
                                 label,
                             )
                             all_intervals.add(corresponding_interval)
+                        # NOTE - handle logits saving
+                        if save_logits:
+                            raw_logits[(frame_start, frame_end)].append(
+                                raw_logit.detach().cpu().numpy().item()
+                            )
 
         elif isinstance(model.label_encoder, PowersetMultiLabelEncoder):
             # NOTE - using windows of size 20ms in model output
@@ -292,9 +267,16 @@ def sliding_prediction(
 
     # NOTE - save logits to disk
     if save_logits:
+        raw_logits_array = np.array(
+            [
+                (start_f, end_f, np.array(logits))
+                for (start_f, end_f), logits in raw_logits.items()
+            ],
+            dtype=mem_logit_dt,
+        )
         print(f"[log] - saving logits to disk under '{output_p / 'logits'}'")
         write_logits_to_disk(
-            logits=raw_logits, logits_p=output_p / "logits" / audio_path.stem
+            logits=raw_logits_array, logits_p=output_p / "logits" / audio_path.stem
         )
 
 

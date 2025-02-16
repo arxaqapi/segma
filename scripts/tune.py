@@ -62,21 +62,28 @@ def eval_loaded_rttms(
             # NOTE - UEM is inferred
             detailed=True,
         )
-
-    # print(f"[log] - total f1-score {abs(metric)}")
+    print(f"[log] - total f1-score {abs(metric)}")
     return abs(metric)
 
 
 def tune(
     logits_p: Path,
     config: Config,
-    n_trials: int = 20,
+    n_trials: int = 100,
     dataset_to_tune_on: Path = Path("data/baby_train"),
-):
+) -> optuna.trial.FrozenTrial:
+    """Perform histerisis-tresholding tuning for MultiLabelSegmentation problems.
+
+    Args:
+        logits_p (Path): Path to saved logits to use for in-memory optimisation.
+        config (Config): Config file of the corresponding run.
+        n_trials (int, optional): Number of trials to run. Defaults to 100.
+        dataset_to_tune_on (Path, optional): Path to the dataset to use, should contain a `val.txt` file. Defaults to Path("data/baby_train").
+
+    Returns:
+        optuna.trial.FrozenTrial: Best found trial.
     """
-    - instantiate tresholding parameters
-    -
-    """
+    
     assert (dataset_to_tune_on / "val.txt").exists()
     # NOTE - load GT validation RTTMs
     # REVIEW - ONLY UNE ON THE VALIDATION SET AND NOT THE TEST SET !!!
@@ -95,33 +102,42 @@ def tune(
     def objective(trial: optuna.Trial):
         thresholds = {
             label: {
-                "lower_bound": trial.suggest_uniform(f"{label}.lower_bound", 0.0, 1.0),
-                "upper_bound": trial.suggest_uniform(f"{label}.upper_bound", 0.0, 1.0),
+                "lower_bound": trial.suggest_float(
+                    name=f"{label}.lower_bound",
+                    low=0.0,
+                    high=1.0,  # , step=0.01
+                ),
+                "upper_bound": trial.suggest_float(
+                    name=f"{label}.upper_bound",
+                    low=0.0,
+                    high=1.0,  # , step=0.01
+                ),
             }
             for label in label_encoder.base_labels
         }
-        # print(thresholds)
         predictions = predict_all_logits(
             logits=logits,
             tresholds=thresholds,
             label_encoder=label_encoder,
-            config=config,
         )
 
-        # exit(55)
         return eval_loaded_rttms(
             rttms_true=validation_gt_rttm,
             rttms_pred=predictions,
             label_encoder=label_encoder,
         )
 
-    # TODO - create initial trial
     study = optuna.create_study(
         direction="maximize", sampler=optuna.samplers.TPESampler()
     )
-    study.optimize(objective, n_trials=n_trials, n_jobs=1)  # , show_progress_bar=True)
+    # NOTE - create initial trial
+    study.enqueue_trial(
+        {f"{label}.lower_bound": 0.5 for label in label_encoder.base_labels}
+        | {f"{label}.upper_bound": 1.0 for label in label_encoder.base_labels}
+    )
+    study.optimize(objective, n_trials=n_trials, n_jobs=-1)
 
-    return study.best_params
+    return study.best_trial
 
 
 if __name__ == "__main__":
@@ -143,7 +159,7 @@ if __name__ == "__main__":
         "--n-trials",
         "--n_trials",
         type=int,
-        default=20,
+        default=100,
         help="Number of optuna trials to run.",
     )
     parser.add_argument(
@@ -160,7 +176,7 @@ if __name__ == "__main__":
     args.output = Path(args.output)
 
     print("[log] - starting tuning pipeline ...:)")
-    optimized_treshold = tune(
+    best_trial = tune(
         logits_p=args.logits,
         config=load_config(args.config),
         n_trials=args.n_trials,
@@ -168,6 +184,8 @@ if __name__ == "__main__":
     )
 
     with (args.output / "tresholds.yml").open("w") as f:
-        yaml.safe_dump(optimized_treshold, f)
+        yaml.safe_dump(best_trial.params, f)
 
-    print(f"[log] - {optimized_treshold=}")
+    print(
+        f"[log] - found best trial with value: {best_trial.value} and parameters: \n{best_trial.params=}"
+    )

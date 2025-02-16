@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 
 from segma.utils.experiment import Experiment
@@ -6,7 +7,10 @@ from segma.utils.experiment import Experiment
 def meta_run_gen(
     experiments: list[Experiment], meta_run_p: Path = Path("meta_run.sh")
 ) -> None:
-    meta_run_p.unlink(missing_ok=True)
+    if meta_run_p.exists():
+        meta_run_p.rename(
+            datetime.now().strftime("%y%m%d-%H%M%S_") + "meta_run.backup.sh"
+        )
     with meta_run_p.open("w") as f:
         f.writelines(["sbatch " + str(exp.run_script_p) + "\n" for exp in experiments])
 

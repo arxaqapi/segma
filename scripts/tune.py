@@ -1,0 +1,173 @@
+import argparse
+from pathlib import Path
+
+import optuna
+import yaml
+from pyannote.audio.utils.metric import MacroAverageFMeasure
+from pyannote.core import Annotation, Segment
+
+from segma.annotation import AudioAnnotation
+from segma.config.base import Config, load_config
+from segma.dataloader import load_uris
+from segma.predict import load_all_logits, predict_all_logits
+from segma.utils.encoders import (
+    LabelEncoder,
+    MultiLabelEncoder,
+    PowersetMultiLabelEncoder,
+)
+
+
+def load_dataset_gt(uri_list_p: Path, rttm_p: Path) -> dict[str, list[AudioAnnotation]]:
+    assert uri_list_p.exists()
+    assert rttm_p.exists()
+
+    uri_list = set(load_uris(uri_list_p))
+
+    uri_to_rttm = {}
+    for uri in uri_list:
+        uri_rttm_p = (rttm_p / uri).with_suffix(".rttm")
+        with uri_rttm_p.open("r") as f:
+            annots = [AudioAnnotation.from_rttm(line) for line in f.readlines()]
+        uri_to_rttm[uri] = annots
+    return uri_to_rttm
+
+
+def aa_to_annotation(uri: str, rttms: list[AudioAnnotation]) -> Annotation:
+    annotation = Annotation(uri)
+
+    for i, rttm in enumerate(rttms):
+        segment = Segment(start=rttm.start_time_s, end=rttm.end_time_s)
+        annotation[segment, i] = rttm.label
+    return annotation
+
+
+def eval_loaded_rttms(
+    rttms_true: dict[str, list[AudioAnnotation]],
+    rttms_pred: dict[str, list[AudioAnnotation]],
+    label_encoder: LabelEncoder,
+):
+    """Evaluates the performance of a model using the `MacroAverageFMeasure`from the `pyannote.metrics`
+    package.
+    """
+    metric = MacroAverageFMeasure(classes=list(label_encoder.base_labels))
+
+    supported_uris = set(rttms_true.keys()) & set(rttms_pred.keys())
+    assert len(supported_uris) > 0
+
+    for uri in supported_uris:
+        # print(f"[log] - evaluating file: '{uri}'")
+        metric(
+            reference=aa_to_annotation(uri, rttms_true[uri]),
+            hypothesis=aa_to_annotation(uri, rttms_pred[uri]),
+            # NOTE - UEM is inferred
+            detailed=True,
+        )
+
+    # print(f"[log] - total f1-score {abs(metric)}")
+    return abs(metric)
+
+
+def tune(
+    logits_p: Path,
+    config: Config,
+    n_trials: int = 20,
+    dataset_to_tune_on: Path = Path("data/baby_train"),
+):
+    """
+    - instantiate tresholding parameters
+    -
+    """
+    assert (dataset_to_tune_on / "val.txt").exists()
+    # NOTE - load GT validation RTTMs
+    # REVIEW - ONLY UNE ON THE VALIDATION SET AND NOT THE TEST SET !!!
+    validation_gt_rttm = load_dataset_gt(
+        uri_list_p=dataset_to_tune_on / "val.txt", rttm_p=dataset_to_tune_on / "rttm"
+    )
+
+    # NOTE - load all logits test set in memory
+    logits = load_all_logits(logits_p=logits_p)
+    label_encoder: LabelEncoder = (
+        MultiLabelEncoder(config.data.classes)
+        if "hydra" in config.model.name
+        else PowersetMultiLabelEncoder(config.data.classes)
+    )
+
+    def objective(trial: optuna.Trial):
+        thresholds = {
+            label: {
+                "lower_bound": trial.suggest_uniform(f"{label}.lower_bound", 0.0, 1.0),
+                "upper_bound": trial.suggest_uniform(f"{label}.upper_bound", 0.0, 1.0),
+            }
+            for label in label_encoder.base_labels
+        }
+        # print(thresholds)
+        predictions = predict_all_logits(
+            logits=logits,
+            tresholds=thresholds,
+            label_encoder=label_encoder,
+            config=config,
+        )
+
+        # exit(55)
+        return eval_loaded_rttms(
+            rttms_true=validation_gt_rttm,
+            rttms_pred=predictions,
+            label_encoder=label_encoder,
+        )
+
+    # TODO - create initial trial
+    study = optuna.create_study(
+        direction="maximize", sampler=optuna.samplers.TPESampler()
+    )
+    study.optimize(objective, n_trials=n_trials, n_jobs=1)  # , show_progress_bar=True)
+
+    return study.best_params
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-c",
+        "--config",
+        type=str,
+        required=True,
+        help="Config file to be loaded and used for inference.",
+    )
+    parser.add_argument(
+        "--logits",
+        type=str,
+        required=True,
+        help="Path to logits.",
+    )
+    parser.add_argument(
+        "--n-trials",
+        "--n_trials",
+        type=int,
+        default=20,
+        help="Number of optuna trials to run.",
+    )
+    parser.add_argument(
+        "--dataset",
+        default="data/baby_train",
+        help="Dataset to use for tuning, should contain a 'val.txt' files.",
+    )
+    parser.add_argument(
+        "--output", required=True, help="Output folder of the tuned tresholds."
+    )
+
+    args = parser.parse_args()
+    args.dataset = Path(args.dataset)
+    args.output = Path(args.output)
+
+    print("[log] - starting tuning pipeline ...:)")
+    optimized_treshold = tune(
+        logits_p=args.logits,
+        config=load_config(args.config),
+        n_trials=args.n_trials,
+        dataset_to_tune_on=args.dataset,
+    )
+
+    with (args.output / "tresholds.yml").open("w") as f:
+        yaml.safe_dump(optimized_treshold, f)
+
+    print(f"[log] - {optimized_treshold=}")

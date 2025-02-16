@@ -10,7 +10,11 @@ from segma.config.base import Config
 from segma.models.base import BaseSegmentationModel
 from segma.structs.interval import Interval, Intervals
 from segma.utils.conversions import frames_to_milliseconds
-from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
+from segma.utils.encoders import (
+    LabelEncoder,
+    MultiLabelEncoder,
+    PowersetMultiLabelEncoder,
+)
 
 
 def write_logits_to_disk(logits: list[np.ndarray], logits_p: Path | str) -> None:
@@ -18,13 +22,14 @@ def write_logits_to_disk(logits: list[np.ndarray], logits_p: Path | str) -> None
     logits_p = Path(logits_p)
     logits_p.parent.mkdir(parents=True, exist_ok=True)
 
-    logits_a = np.stack(logits, axis=0) if len(logits) > 1 else np.array(logits[0])
+    logits_a = np.concat(logits, axis=0) if len(logits) > 1 else np.array(logits[0])
+    # logits_a = np.stack(logits, axis=0) if len(logits) > 1 else np.array(logits[0])
 
-    with logits_p.open("wb") as bf:
+    with logits_p.with_suffix(".npy").open("wb") as bf:
         np.save(bf, logits_a)
 
 
-def load_logits_from_disk(logits_p: Path | str) -> np.ndarray:
+def load_logit_from_disk(logits_p: Path | str) -> np.ndarray:
     """Loads np array to memory."""
     logits_p = Path(logits_p)
     with logits_p.open("rb") as bf:
@@ -32,9 +37,90 @@ def load_logits_from_disk(logits_p: Path | str) -> np.ndarray:
     return logits_a
 
 
-def predict_from_logits(logits: np.ndarray, output_p: Path, config: Config):
-    """Given a stack of logits of the shape (batch, output_dim, n_labels), perform prediction."""
-    raise NotImplementedError
+def load_all_logits(logits_p: Path | str) -> dict[str, np.ndarray]:
+    logits_p = Path(logits_p)
+    assert logits_p.exists() and logits_p.is_dir()
+    # .npy
+    return {logit.stem: load_logit_from_disk(logit) for logit in logits_p.glob("*")}
+
+
+def predict_all_logits(
+    logits: dict[str, np.ndarray],
+    tresholds: dict[str, dict[str, float]],
+    label_encoder: LabelEncoder,
+    config: Config,
+) -> dict[str, list[AudioAnnotation]]:
+    """Given a dict that maps uris to logits, perform prediction for each loaded logit and return a dict that maps uris to predictions."""
+    return {
+        uri: predict_from_logits_with_tresholds(
+            logit, uri, tresholds, label_encoder, config
+        )
+        for uri, logit in logits.items()
+    }
+
+
+def predict_from_logits_with_tresholds(
+    logits: np.ndarray,
+    uri: str,
+    tresholds: dict[str, dict[str, float]],
+    label_encoder: LabelEncoder,
+    config: Config,
+) -> list[AudioAnnotation]:
+    """Given a stack of logits of the shape (batch, output_dim, n_labels), perform prediction respecting the given tresholds."""
+    assert isinstance(label_encoder, MultiLabelEncoder)
+
+    all_intervals = Intervals()
+
+    chunck_size_f = int(config.audio.chunk_duration_s) * config.audio.sample_rate
+    reference_windows = gen_bounds(
+        max_value=chunck_size_f, clip_values=(0, chunck_size_f)
+    )[: logits.shape[1]]
+
+    for batch_i, chunk in enumerate(logits):
+        # logits: (batch, n_features, out)
+        # chunk: (n_features, n_labels)
+
+        for preds, (w_start, w_end) in zip(chunk, reference_windows):
+            # preds: (n_labels,)
+            offset = batch_i * chunck_size_f
+            frame_start = w_start + offset
+            frame_end = w_end + offset + 1
+            # TODO - skip padded section
+
+            # TODO - implement label extraction and thresholding
+            # label_logit = 1 if tresholds[label]["lower_bound"] <= val <= tresholds[label]["upper_bound"] else 0
+            preds_d = {
+                label: 1
+                if tresholds[label]["lower_bound"]
+                <= label_logit
+                <= tresholds[label]["upper_bound"]
+                else 0
+                for label_logit, label in zip(preds, label_encoder.base_labels)
+                # label: label_logit for label_logit, label in zip(chunk, label_encoder.base_labels)
+            }
+            # found_labels = [] if pred == 0 else [head_label]
+            for label, tresholded_value in preds_d.items():
+                if tresholded_value:
+                    corresponding_interval: Interval = (
+                        frame_start,
+                        frame_end,
+                        label,
+                    )
+                    all_intervals.add(corresponding_interval)
+    return interval_to_aa(all_intervals, uri)
+
+
+def interval_to_aa(intervals: Intervals, uri: str) -> list[AudioAnnotation]:
+    """Transforms an `Intervals` object into a list of `AudioAnnotation`s."""
+    return [
+        AudioAnnotation(
+            uid=uri,
+            start_time_ms=float(frames_to_milliseconds(start_f)),
+            duration_ms=float(frames_to_milliseconds(end_f - start_f)),
+            label=str(label),
+        )
+        for start_f, end_f, label in intervals
+    ]
 
 
 def write_intervals(intervals: Intervals, audio_path: Path, output_p: Path):
@@ -132,6 +218,9 @@ def sliding_prediction(
                     torch.device("mps" if torch.backends.mps.is_available() else "cuda")
                 )
             )
+            if "hydra" in config.model.name:
+                for key, head_output_t in output_t.items():
+                    output_t[key] = torch.nn.functional.sigmoid(head_output_t)
 
         # NOTE - takes the output tensor and stacks it into a list of np.array
         if save_logits and isinstance(model.label_encoder, MultiLabelEncoder):

@@ -4,6 +4,7 @@
 from collections import ChainMap
 from functools import reduce
 from pathlib import Path
+from typing import Mapping
 
 from pyannote.audio.utils.metric import MacroAverageFMeasure
 from pyannote.core import Annotation
@@ -18,7 +19,7 @@ from segma.utils.encoders import (
 )
 
 
-def get_model_output_as_annotations(output_path: Path) -> dict[str, Annotation]:
+def get_model_output_as_annotations(output_path: Path) -> Mapping[str, Annotation]:
     """Load the output of a model (collectioin of `.rttm` files) as `pyannote.core.Annotation` objects
     and returns a dict that maps uri to the corresponding RTTMs.
 
@@ -115,8 +116,8 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    args.gt = Path(args.gt) if not isinstance(args.gt, Path) else args.gt
-    args.pred = Path(args.pred) if not isinstance(args.pred, Path) else args.pred
+    args.gt = Path(args.gt)
+    args.pred = Path(args.pred)
     cfg = load_config(args.config)
 
     eval_model_output(

@@ -224,7 +224,8 @@ python -u scripts/predict.py \
     --uris data/{eval_ds}/test.txt \
     --wavs data/{eval_ds}/wav \
     --ckpt {self.exp_path}/checkpoints/{ckpt} \
-    --output {self.exp_path}/{out_path}
+    --output {self.exp_path}/{out_path} \
+    --save-logits
 
 
 # 2. evaluate predictions

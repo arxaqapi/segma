@@ -1,4 +1,5 @@
 import argparse
+import random
 from collections import defaultdict
 from pathlib import Path
 
@@ -18,11 +19,15 @@ from segma.utils.encoders import (
 )
 
 
-def load_dataset_gt(uri_list_p: Path, rttm_p: Path) -> dict[str, list[AudioAnnotation]]:
+def load_dataset_gt(
+    uri_list_p: Path, rttm_p: Path, sub_sample: int | None = None
+) -> dict[str, list[AudioAnnotation]]:
     assert uri_list_p.exists()
     assert rttm_p.exists()
 
     uri_list = set(load_uris(uri_list_p))
+    if sub_sample:
+        uri_list = random.sample(list(uri_list), k=sub_sample)
 
     uri_to_rttm = {}
     for uri in uri_list:
@@ -90,8 +95,12 @@ def tune(
     if not (dataset_to_tune_on / "val.txt").exists():
         raise ValueError("File `val.txt` is not available in the considered dataset.")
     validation_gt_rttm = load_dataset_gt(
-        uri_list_p=dataset_to_tune_on / "val.txt", rttm_p=dataset_to_tune_on / "rttm"
+        uri_list_p=dataset_to_tune_on / "val.txt",
+        rttm_p=dataset_to_tune_on / "rttm",
+        sub_sample=300,
     )
+    with (logits_p.parent.parent / "tune_uris.txt").open("w") as f:
+        f.writelines([uri + "\n" for uri in validation_gt_rttm.keys()])
 
     # NOTE - load all logits test set in memory
     logits = load_all_logits(logits_p=logits_p)
@@ -137,6 +146,7 @@ def tune(
         {f"{label}.lower_bound": 0.5 for label in label_encoder.base_labels}
         | {f"{label}.upper_bound": 1.0 for label in label_encoder.base_labels}
     )
+    print("[log] - Aaaaaaand let's tune <<|>>")
     study.optimize(objective, n_trials=n_trials, n_jobs=-1)
 
     return study.best_trial
@@ -196,6 +206,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args.dataset = Path(args.dataset)
     args.output = Path(args.output)
+    args.logits = Path(args.logits)
+    args.output.mkdir(parents=True, exist_ok=True)
 
     print("[log] - starting tuning pipeline ...:)")
     best_trial = tune(

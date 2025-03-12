@@ -13,6 +13,7 @@ dependencies = [
     "numpy>=2.1.2",
     "omegaconf>=2.3.0",
     "optuna>=4.2.1",
+    "polars>=1.22.0",
     "pyyaml>=6.0.2",
     "scipy>=1.14.1",
     "soundfile>=0.12.1; sys_platform == 'darwin'",

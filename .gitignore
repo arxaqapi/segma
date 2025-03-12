@@ -3,6 +3,7 @@ data/
 logs/
 wandb/
 notebooks/
+import
 /models/
 /experiments/
 whisper_*_encoder/

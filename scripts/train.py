@@ -28,6 +28,7 @@ from segma.models import (
     Whisperidou,
     WhisperiMax,
 )
+from segma.utils import set_seed
 from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
 
 
@@ -70,6 +71,8 @@ if __name__ == "__main__":
 
     args, extra_args = parser.parse_known_args()
     cfg: Config = load_config(config_path=args.config, cli_extra_args=extra_args)
+    if cfg.train.seed:
+        set_seed(cfg.train.seed)
 
     chkp_path = Path("models")
     if not chkp_path.exists():

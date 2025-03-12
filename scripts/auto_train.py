@@ -28,6 +28,7 @@ from segma.models import (
     Whisperidou,
     WhisperiMax,
 )
+from segma.utils import set_seed
 from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
 from segma.utils.experiment import new_experiment_id
 
@@ -82,6 +83,8 @@ if __name__ == "__main__":
         args.run_id = new_experiment_id()
 
     config: Config = load_config(config_path=args.config, cli_extra_args=extra_args)
+    if config.train.seed:
+        set_seed(config.train.seed)
 
     experiment_path = Path(args.output)
     if not experiment_path.exists():

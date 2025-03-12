@@ -168,6 +168,7 @@ class TrainConfig(BaseConfig):
     dataloader: DataloaderConfig
 
     scheduler: SchedulerConfig
+    seed: int | None = None
 
 
 @dataclass

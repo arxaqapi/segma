@@ -50,6 +50,7 @@ def test_load_config():
     assert cfg.train.profiler is None
     assert cfg.train.dataloader.num_workers == 8
     assert cfg.train.scheduler.patience == 3
+    assert cfg.train.seed is None
 
 
 def test_load_config_missing():
@@ -117,6 +118,7 @@ def test_load_config_extra_args():
             "model.config.encoder_layers=[1,3]",
             "model.config.reduction=average",
             "train.extra_val_metrics=[loss]",
+            "train.seed=999",
         ],
     )
 
@@ -126,6 +128,7 @@ def test_load_config_extra_args():
     assert cfg.model.config.encoder_layers == [1, 3]
     assert cfg.model.config.reduction == "average"
     assert cfg.train.extra_val_metrics == ["loss"]
+    assert cfg.train.seed == 999
 
 
 def test_cleanup():

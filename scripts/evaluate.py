@@ -1,7 +1,6 @@
 # takes a folder full of true_rttms, a folder full of pred_rttms
 # pass everything trough pyannote.metrics
 # output overall stats
-from collections import ChainMap
 from functools import reduce
 from pathlib import Path
 from typing import Mapping
@@ -10,7 +9,6 @@ from pyannote.audio.utils.metric import MacroAverageFMeasure
 from pyannote.core import Annotation
 from pyannote.database.util import load_rttm
 
-# from segma.annotation import AudioAnnotation
 from segma.config import load_config
 from segma.utils.encoders import (
     LabelEncoder,
@@ -22,18 +20,18 @@ from segma.utils.encoders import (
 def get_model_output_as_annotations(output_path: Path) -> Mapping[str, Annotation]:
     """Load the output of a model (collectioin of `.rttm` files) as `pyannote.core.Annotation` objects
     and returns a dict that maps uri to the corresponding RTTMs.
-
     Args:
         output_path (Path): Path to the folder containing the model outputs.
-
     Returns:
         dict[str, Annotation]: mapping from uris to Annotations.
     """
-    annotations: list[dict[str, Annotation]] = [
-        load_rttm(f) for f in output_path.glob("*.rttm")
-    ]
-    annot_dict = ChainMap(*annotations)
-    return annot_dict
+    annotations = {}
+    for rttm in output_path.glob("*.rttm"):
+        loaded_rttms = load_rttm(rttm)
+        annotations[rttm.stem] = (
+            Annotation(rttm.stem) if not loaded_rttms else loaded_rttms[rttm.stem]
+        )
+    return annotations
 
 
 def eval_model_output(

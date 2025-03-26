@@ -4,7 +4,7 @@ from collections import defaultdict
 from functools import reduce
 from math import ceil, floor
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Generator
 
 import lightning as pl
 import numpy as np
@@ -26,13 +26,37 @@ from segma.utils.receptive_fields import rf_end_i, rf_start_i
 
 
 def load_uris(file_p: Path) -> list[str]:
-    """loads a list of uris"""
+    """Loads a list of URIs from a given text file.
+
+    Args:
+        file_p (Path): Path to the file containing one URI per line.
+
+    Returns:
+        list[str]: A list of URIs as strings.
+
+    Example:
+        Contents of the file pointed to by `file_p`:
+            ```
+            # file_p content
+            uri_001
+            uri_002
+            uri_003
+            ```
+    """
     with file_p.open("r") as f:
         uris = [line.strip() for line in f.readlines()]
     return uris
 
 
 def load_annotations(aa_file_p: Path) -> list[AudioAnnotation]:
+    """Loads audio annotations from a file.
+
+    Args:
+        aa_file_p (Path): Path to the file containing audio annotations.
+
+    Returns:
+        list[AudioAnnotation]: A list of parsed `AudioAnnotation` objects.
+    """
     with aa_file_p.open("r") as f:
         annotations = [AudioAnnotation.read_line(line) for line in f.readlines()]
     return annotations
@@ -40,17 +64,38 @@ def load_annotations(aa_file_p: Path) -> list[AudioAnnotation]:
 
 def filter_annotations(
     annotations: list[AudioAnnotation], covered_labels: tuple[str, ...]
-):
+) -> list[AudioAnnotation]:
+    """Filters a list of audio annotation by removing labels that are not in `covered_labels`.
+
+    Args:
+        annotations (list[AudioAnnotation]): A list of `AudioAnnotation` objects.
+        covered_labels (tuple[str, ...]): tuple of labels to keep.
+
+    Returns:
+        list[AudioAnnotation]: A filtered list of `AudioAnnotation` objects.
+    """
     return [annot for annot in annotations if annot.label in covered_labels]
 
 
-def total_annotation_duration(annotations: list[AudioAnnotation]) -> float:
+def total_annotation_duration_ms(annotations: list[AudioAnnotation]) -> float:
+    """Computed the total annotated duration in ms of a list of `AudioAnnotation` objects.
+
+    Args:
+        annotations (list[AudioAnnotation]): List of `AudioAnnotation` objects.
+
+    Returns:
+        float: Total duration in ms of all annotated segments.
+    """
     return reduce(lambda b, e: b + e.duration_ms, annotations, 0)
 
 
 class SegmentationDataLoader(pl.LightningDataModule):
-    """The `SegmentationDataLoader` class prepares the dataset by loading all usefull metadata
-    and creating all intervals objects used later on in the AudioSegmentationDataset class.
+    """`SegmentationDataLoader` is a `pl.LightningDataModule` subclass that loads all required informations about the dataset
+    and returns `AudioSegmentationDataset` (which are `IterableDataset`s) for training and validation.
+
+    On initialization, the `SegmentationDataLoader` loads all uris,
+    retrieves and store the total length of the corresponding audios and annotated duration,
+    and createst `Interlap`objects per uri.
     """
 
     def __init__(
@@ -77,7 +122,8 @@ class SegmentationDataLoader(pl.LightningDataModule):
             for subset in ("train", "val", "test")
         }
 
-        # NOTE for each subset, get and store audio duration, annotated duration (as number of frames) and annotations
+        # NOTE - for each subset, get and store audio duration, annotated duration (as number of frames) and annotations
+        # NOTE - the audio_duration_f and annotated_duration_f are stored as a tuple in the list `self.subds_to_durations`
         _durations_t = np.dtype(
             [("audio_duration_f", np.int32), ("annotated_duration_f", np.int32)]
         )
@@ -116,7 +162,7 @@ class SegmentationDataLoader(pl.LightningDataModule):
                 _subds_to_annotations[subset].append(annotations)
 
                 duration_l.append(
-                    (info.num_frames, total_annotation_duration(annotations))
+                    (info.num_frames, total_annotation_duration_ms(annotations))
                 )
 
             # NOTE - make efficient np.array
@@ -230,8 +276,8 @@ class SegmentationDataLoader(pl.LightningDataModule):
 
 
 class AudioSegmentationDataset(IterableDataset):
-    """`AudioSegmentationDataset` is an `IterableDataset` that produces __len__ segments
-    of a given duration.
+    """`AudioSegmentationDataset` is an `IterableDataset` that yields short audio segments and corresponding labels
+    for supervised training. Audio is sampled randomly from full recordings with corresponding annotations.
     """
 
     def __init__(
@@ -257,29 +303,37 @@ class AudioSegmentationDataset(IterableDataset):
             conv_settings=self.conv_settings,
             sample_rate=config.audio.sample_rate,
             chunk_duration_s=config.audio.chunk_duration_s,
-            # TODO - config
-            # strict_frames: True is pyannet - False if whisper
+            # TODO - strict_frames: True is pyannet - False if whisper
             strict=config.audio.strict_frames,
         )
 
-        assert len(uris) == durations.shape[0]
+        assert len(uris) == durations.shape[0], "Mismatch between URIs and durations."
 
-    def __iter__(self):
+    def __iter__(self) -> Generator[dict[str, np.ndarray | torch.Tensor], None, None]:
+        """Randomly samples an 'self.config.audio.chunk_duration_s' second audio sample with its corresponding labels.
+        The labels correspond to overlapping frames with 'displacement' settings obtained from the models `ConvolutionSettings`.
+
+        Yields:
+            Generator[dict[str, np.ndarray]]: Yields a dict with content:
+
+            - **x** (np.ndarray) -- Preprocessed waveform
+            - **y** (np.ndarray) -- array of encoded target vectors. (d, n_labels)
+        """
         w_info = torch.utils.data.get_worker_info()
-        # ensures each worker has a separate seed
-        rng = np.random.default_rng(seed=w_info.seed)
+        # Ensures that each worker has a separate seed
+        rng = np.random.default_rng(seed=w_info.seed if w_info else None)
 
         durations_f = floor(seconds_to_frames(self.config.audio.chunk_duration_s))
         while True:
-            # NOTE 1. sample a file depending on its annotated or audio duration
+            # NOTE - 1. Sample a file depending on its annotated or audio duration
             # audio_duration_f, annotated_duration_f
-            uri_i = rng.choice(
-                np.arange(len(self.uris)),
-                p=self.durations["audio_duration_f"]
-                / self.durations["audio_duration_f"].sum(),
+            weights = (
+                self.durations["audio_duration_f"]
+                / self.durations["audio_duration_f"].sum()
             )
+            uri_i = rng.choice(len(self.uris), p=weights)
 
-            # NOTE 2. sample a start index between 0 and (audio.len - duration)
+            # NOTE - 2. sample a start index between 0 and (audio.len - duration)
             start_index_f = int(
                 rng.integers(
                     low=0,
@@ -287,52 +341,86 @@ class AudioSegmentationDataset(IterableDataset):
                 )
             )
 
-            # NOTE 3. {'x': cropped audio from [start_idx: start_idx + duration]
+            # NOTE - 3. {'x': cropped audio from [start_idx: start_idx + duration]
             #     'y': overlaping frames corresponding to the model output [[...n-labels], ...] }
             # (32000)
+            audio_path = Path(self.config.data.dataset_path) / "wav" / self.uris[uri_i]
             waveform = self.load_audio(
-                (
-                    Path(self.config.data.dataset_path) / "wav" / self.uris[uri_i]
-                ).with_suffix(".wav"),
+                audio_file_p=audio_path.with_suffix(".wav"),
                 start_f=start_index_f,
                 duration_f=durations_f,
             )
 
-            # NOTE 4. generate corresponding sliding window 'y' vector and get labels
+            # NOTE - 4. generate corresponding sliding window 'y' vector and get labels
             windows = self.windows + start_index_f
             y_target = windows_to_targets(
                 windows, self.label_encoder, self.annotations[uri_i]
             )
 
-            # NOTE - (32000) to (1, 80, 3000)
-            waveform = self.audio_preparation_hook(waveform)
+            # NOTE - 5. Optional preprocessing (e.g., STFT, Mel, normalization): (32000) to (1, 80, 3000)
+            if self.audio_preparation_hook is not None:
+                waveform = self.audio_preparation_hook(waveform)
 
             # x: (_, waveforms), y: (_, n_windows, n_labels)
             yield {"x": waveform.squeeze(), "y": y_target}
 
-    def load_audio(self, audio_file_p: Path, start_f: int, duration_f: int):
-        """loads only wanted segment from audio and downsamples it."""
-        if duration_f != self.config.audio.chunk_duration_s * 16_000:
+    def load_audio(
+        self, audio_file_p: Path, start_f: int, duration_f: int
+    ) -> torch.Tensor:
+        """Loads a section of an audio file starting from frame `start_f` and spanning `duration_f` frames.
+        The loaded audio is downmixed to mono if it has multiple channels.
+
+        Args:
+            audio_file_p (Path): Path to the audio file to load.
+            start_f (int): Start frame to begin loading from.
+            duration_f (int): Number of frames to load. Must match the expected chunk size from config.
+
+        Raises:
+            ValueError: If `duration_f` does not match the expected chunk duration in frames.
+
+        Returns:
+            torch.Tensor: A 1D tensor containing the mono audio waveform segment.
+        """
+        n_expected_frames = int(
+            self.config.audio.chunk_duration_s * self.config.audio.sample_rate
+        )
+        if duration_f != n_expected_frames:
             raise ValueError(
-                f"Error in `AudioSegmentationDataset.load_audio()`: `{duration_f=}` != {self.config.audio.chunk_duration_s * 16_000=}"
+                f"Error in `AudioSegmentationDataset.load_audio()`: `{duration_f=}` does not match expected `{n_expected_frames}` frames."
             )
         audio_t, _sr = torchaudio.load(
             audio_file_p.resolve(), frame_offset=start_f, num_frames=duration_f
         )
-        # downmix to mono
+        # Downmix to mono if necessary
         if audio_t.shape[0] > 1:
             audio_t = audio_t.mean(dim=0)
+
         return audio_t.squeeze()
 
     def __len__(self):
-        # total size of the dataset, signals a complete pass over the data
-        # This will create multiple passes in the same epoch if batch_size is smaller that n (this value)
-        # NOTE - we want to ensure that there is at least one batch, since incomplete batches are not kept
+        """Estimate the number of audio chunks sampled in one epoch.
+
+        Since this is an `IterableDataset`, `__len__` provides a hint to the training loop
+        about how many samples will be yielded during one epoch. This is especially useful
+        for progress bars, checkpointing, or early stopping criteria.
+
+        The number is computed based on the total available audio duration (in seconds),
+        divided by the configured chunk duration (e.g., 2 seconds), and scaled by a
+        `dataset_multiplier` from the config. To avoid epochs with too few samples,
+        the result is also forced to be at least as large as the batch size.
+
+        Note:
+            This length does not represent the number of unique audio segments,
+            but rather how many *samples* will be drawn per epoch, potentially
+            with replacement or overlap.
+
+        Returns:
+            int: Estimated number of training samples (chunks) drawn in one epoch.
+        """
         # audio_duration_f, annotated_duration_f
         total_annotated_duration_s = frames_to_seconds(
             self.durations["audio_duration_f"].sum()
         )
-        # REVIEW - file error with iterable dataset len that has to be an integer
         return int(
             self.config.data.dataset_multiplier
             * max(
@@ -348,9 +436,19 @@ def generate_frames(
     chunk_duration_s: float = 2.0,
     strict: bool = True,
 ) -> np.ndarray:
-    """Given a models receptive field settings and a `chunk_duration_s`,
-    compute the amount of possible frames to generate and generate these frames.
-    (to be offsetted)
+    """Generate the frame ranges (start and end indices) for each receptive field window
+    over a given audio chunk.
+
+    Args:
+        conv_settings (ConvolutionSettings): Model-specific convolution parameters.
+        sample_rate (int): Sample rate of the audio (e.g. 16000 Hz).
+        chunk_duration_s (float, optional): Duration of the audio chunk in seconds. Defaults to 2.0.
+        strict (bool, optional):
+            If True, include only fully-contained windows.
+            If False, allow partial windows that may exceed the chunk. Defaults to True.
+
+    Returns:
+        np.ndarray: An array of shape (n_windows, 2), where each row is [start_frame, end_frame].
     """
     # should be 32_000 for 2s @ 16khz
     # should be 96_000 for 6s @ 16khz
@@ -362,7 +460,7 @@ def generate_frames(
     n_windows = conv_settings.n_windows(
         chunk_duration_f=chunk_duration_f, strict=strict
     )
-    wins = [
+    windows = [
         [
             rf_start_i(i, conv_settings.strides, conv_settings.paddings),
             rf_end_i(
@@ -375,9 +473,7 @@ def generate_frames(
         for i in range(n_windows)
     ]
     # REVIEW - add -1 to chunk_duration_s ??
-    wins = np.array(wins).clip(0, chunk_duration_f)
-
-    return wins
+    return np.array(windows).clip(0, chunk_duration_f)
 
 
 def windows_to_targets(

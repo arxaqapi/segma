@@ -24,21 +24,24 @@ class ConvolutionSettings:
     paddings: tuple[int, ...]
 
     def n_windows(self, chunk_duration_f: int, strict: bool = True) -> int:
-        """compute the total number of covered windows for a given audio duration
+        """Compute the total number of convolution windows that can fit in a given audio chunk.
 
         Args:
-            chunk_duration_f (int, optional): duration of the reference audio. Defaults to 32_000.
-            strict (bool, optional): if strict, the last window is fully contained, otherwise allow for overshooting. Defaults to True.
+            chunk_duration_f (int): Duration of the audio chunk in frames.
+            strict (bool, optional):
+                If True, only count windows that fully fit within the chunk.
+                If False, allow windows that partially exceed the chunk. Defaults to True.
 
         Returns:
-            int: _description_
+            int: Number of valid convolution windows.
         """
-        # add a correction term (1) to the receptive field step computation (in the case a kernel has an even size).
-        correct = reduce(lambda b, e: b or (e % 2 == 0), self.kernels, False)
+        # Add a correction if any kernel has even size (can affect center alignment)
+        has_even_kernel = reduce(lambda b, e: b or (e % 2 == 0), self.kernels, False)
+        correction = 1 if has_even_kernel else 0
 
         # Should be 320 (f) with duration 2 secs and whisper model
         # Should be 270 (f) with duration 2 secs and sinc model
-        rf_step = rf_step = int(
+        rf_step = int(
             rf_center_i(
                 5,
                 self.kernels,
@@ -51,17 +54,16 @@ class ConvolutionSettings:
                 self.strides,
                 self.paddings,
             )
-            + (1 if correct else 0)
+            + correction
         )
 
-        return (
-            (chunk_duration_f // rf_step)
-            if not strict
-            else floor(
+        if strict:
+            return floor(
                 (chunk_duration_f - rf_size(self.kernels, self.strides)) / rf_step
             )
-            + 1
-        )
+            +1
+        else:
+            return chunk_duration_f // rf_step
 
 
 class BaseSegmentationModel(pl.LightningModule):

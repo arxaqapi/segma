@@ -19,7 +19,12 @@ from segma.utils.encoders import (
 
 
 def write_logits_to_disk(logits: np.ndarray, logits_p: Path | str) -> None:
-    """Save the logits to disk."""
+    """Save the logits to disk as a `.npy` file.
+
+    Args:
+        logits (np.ndarray): Logits numpy array to be saved
+        logits_p (Path | str): Output file path (without extension).
+    """
     logits_p = Path(logits_p)
     logits_p.parent.mkdir(parents=True, exist_ok=True)
 
@@ -28,7 +33,14 @@ def write_logits_to_disk(logits: np.ndarray, logits_p: Path | str) -> None:
 
 
 def load_logit_from_disk(logits_p: Path | str) -> np.ndarray:
-    """Loads np array to memory."""
+    """Load a single numpy array of logits from disk.
+
+    Args:
+        logits_p (Path | str): Path to the `.npy` file.
+
+    Returns:
+        np.ndarray: Loaded logits array.
+    """
     logits_p = Path(logits_p)
     with logits_p.open("rb") as bf:
         logits_a = np.load(bf)
@@ -47,7 +59,17 @@ def predict_all_logits(
     tresholds: dict[str, dict[str, float]],
     label_encoder: LabelEncoder,
 ) -> dict[str, list[AudioAnnotation]]:
-    """Given a dict that maps uris to logits, perform prediction for each loaded logit and return a dict that maps uris to predictions."""
+    """Given a dict `logits` that maps uris to logits, perform prediction for each loaded logit
+    and return a dict that maps uris to predictions.
+
+    Args:
+        logits (dict[str, np.ndarray]): _description_
+        tresholds (dict[str, dict[str, float]]): Treshold dict to take into account when predicting from logits.
+        label_encoder (LabelEncoder): _description_
+
+    Returns:
+        dict[str, list[AudioAnnotation]]: A dict that maps an uri to the predicted annotations.
+    """
     return {
         uri: predict_from_logits_with_tresholds(logit, uri, tresholds, label_encoder)
         for uri, logit in logits.items()
@@ -60,7 +82,17 @@ def predict_from_logits_with_tresholds(
     tresholds: dict[str, dict[str, float]],
     label_encoder: LabelEncoder,
 ) -> list[AudioAnnotation]:
-    """Given a stack of logits of the shape (batch, output_dim, n_labels), perform prediction respecting the given tresholds."""
+    """Given a logit array, its corresponding uri and the tresholds to use, perform
+
+    Args:
+        logits (np.ndarray): _description_
+        uri (str): _description_
+        tresholds (dict[str, dict[str, float]]): _description_
+        label_encoder (LabelEncoder): _description_
+
+    Returns:
+        list[AudioAnnotation]: _description_
+    """
     assert isinstance(label_encoder, MultiLabelEncoder)
 
     all_intervals = Intervals()
@@ -295,17 +327,34 @@ def gen_bounds(
     max_value: int = 32_000,
     clip_values: tuple[int, int] = (0, 32_000),
 ) -> list[list[int]]:
-    """generate list of bounds without overlap"""
+    """Generate a list of non-overlapping interval bounds over a specified range.
+
+    Each interval is defined by a start and end value, generated using a sliding window
+    of a given size. The intervals are optionally clipped to remain within a specified range.
+
+    Args:
+        window_size (int, optional): Size of the window used to compute interval bounds. Defaults to 320.
+        start_value (int, optional): Starting point for generating the first bound. Defaults to -160.
+        max_value (int, optional): Upper limit for bound generation. Defaults to 32_000.
+        clip_values (tuple[int, int], optional):
+            Minimum and maximum values to clip the bounds to.
+            Must match the range [min, max]. Defaults to (0, 32_000).
+
+    Returns:
+        list[list[int]]: A list of [start, end] interval bounds, clipped to the specified range.
+
+    Note:
+        Assumes that max_value is equal to clip_values[1]. Raises AssertionError otherwise.
+    """
     assert max_value == clip_values[1]
+
+    starts = np.arange(start_value, max_value + window_size, window_size)
+    ends = np.arange(window_size // 2, max_value + window_size, window_size)
 
     return [
         [int(a), int(b)]
         for a, b in zip(
-            np.arange(start_value, max_value + window_size, window_size).clip(
-                *clip_values
-            ),
-            np.arange(window_size // 2, max_value + window_size, window_size).clip(
-                *clip_values
-            ),
+            starts.clip(*clip_values),
+            ends.clip(*clip_values),
         )
     ]

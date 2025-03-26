@@ -22,6 +22,16 @@ from segma.utils.encoders import (
 def load_dataset_gt(
     uri_list_p: Path, rttm_p: Path, sub_sample: int | None = None
 ) -> dict[str, list[AudioAnnotation]]:
+    """Load ground truth annotations for a list of audio URIs.
+
+    Args:
+        uri_list_p (Path): Path to the file containing a list of URIs.
+        rttm_p (Path): Directory path containing RTTM files (one file per URI).
+        sub_sample (int | None, optional): If provided, randomly sample this number of URIs from the list. Defaults to None.
+
+    Returns:
+        dict[str, list[AudioAnnotation]]: Dictionary mapping each URI to its list of AudioAnnotation instances.
+    """
     assert uri_list_p.exists()
     assert rttm_p.exists()
 
@@ -39,6 +49,16 @@ def load_dataset_gt(
 
 
 def aa_to_annotation(uri: str, rttms: list[AudioAnnotation]) -> Annotation:
+    """Convert a list of `AudioAnnotations` into a `pyannote.core.Annotation`.
+
+    Args:
+        uri (str): URI of the audio file.
+        rttms (list[AudioAnnotation]): List of AudioAnnotation objects for this file.
+
+
+    Returns:
+        Annotation: pyannote.core.Annotation object with labeled segments.
+    """
     annotation = Annotation(uri)
 
     for i, rttm in enumerate(rttms):
@@ -51,9 +71,18 @@ def eval_loaded_rttms(
     rttms_true: dict[str, list[AudioAnnotation]],
     rttms_pred: dict[str, list[AudioAnnotation]],
     label_encoder: LabelEncoder,
-):
-    """Evaluates the performance of a model using the `MacroAverageFMeasure`from the `pyannote.metrics`
-    package.
+) -> float:
+    """Evaluate predictions against ground truth using macro-averaged F-measure.
+
+    This function leverage the `MacroAverageFMeasure` function from the `pyannote.metrics` package.
+
+    Args:
+        rttms_true (dict[str, list[AudioAnnotation]]): Ground truth annotations.
+        rttms_pred (dict[str, list[AudioAnnotation]]): Predicted annotations.
+        label_encoder (LabelEncoder): Label encoder containing the full label set.
+
+    Returns:
+        float: Metric object value after being updated with all files' scores.
     """
     metric = MacroAverageFMeasure(classes=list(label_encoder.base_labels))
 
@@ -166,6 +195,16 @@ def treshold_dict_to_optuna(
 def optuna_out_to_treshold_d(
     optuna_param_dict: dict[str, float], sep: str = "."
 ) -> dict[str, dict[str, float]]:
+    """Takes a flat dict with `sep` as hierarchy divider and creates a nested dict with
+    structure: `{label: {lower_bound: x, upper_bound: y}}`.
+
+    Args:
+        optuna_param_dict (dict[str, float]): Flat dictionary containing the optuna tresholds.
+        sep (str, optional): Separator used to create . Defaults to ".".
+
+    Returns:
+        dict[str, dict[str, float]]: mapping from labels to corresponding treshold dict.
+    """
     params = defaultdict(dict)
     for value_name, value in optuna_param_dict.items():
         label, tresh_name = value_name.split(sep)

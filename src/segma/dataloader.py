@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 from functools import reduce
+from itertools import combinations
 from math import ceil, floor
 from pathlib import Path
 from typing import Callable, Generator
@@ -89,6 +90,9 @@ def total_annotation_duration_ms(annotations: list[AudioAnnotation]) -> float:
     return reduce(lambda b, e: b + e.duration_ms, annotations, 0)
 
 
+class DataLoaderError(Exception): ...
+
+
 class SegmentationDataLoader(pl.LightningDataModule):
     """`SegmentationDataLoader` is a `pl.LightningDataModule` subclass that loads all required informations about the dataset
     and returns `AudioSegmentationDataset` (which are `IterableDataset`s) for training and validation.
@@ -121,6 +125,14 @@ class SegmentationDataLoader(pl.LightningDataModule):
             )
             for subset in ("train", "val", "test")
         }
+
+        # NOTE - check for data-leakage
+        for k1, k2 in combinations(("train", "val", "test"), 2):
+            overlap = set(self.uris[k1]) & set(self.uris[k2])
+            if overlap:
+                raise DataLoaderError(
+                    f"Subset {k1} and {k2} are overlaping, which can be data leakage.\nOverlapping uris are: '{overlap=}'"
+                )
 
         # NOTE - for each subset, get and store audio duration, annotated duration (as number of frames) and annotations
         # NOTE - the audio_duration_f and annotated_duration_f are stored as a tuple in the list `self.subds_to_durations`

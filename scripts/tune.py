@@ -77,6 +77,7 @@ def tune(
     config: Config,
     n_trials: int = 100,
     dataset_to_tune_on: Path = Path("data/baby_train"),
+    sep: str = ".",
 ) -> optuna.trial.FrozenTrial:
     """Perform histerisis-tresholding tuning for MultiLabelSegmentation problems.
 
@@ -143,8 +144,8 @@ def tune(
     )
     # NOTE - create initial trial
     study.enqueue_trial(
-        {f"{label}.lower_bound": 0.5 for label in label_encoder.base_labels}
-        | {f"{label}.upper_bound": 1.0 for label in label_encoder.base_labels}
+        {f"{label}{sep}lower_bound": 0.5 for label in label_encoder.base_labels}
+        | {f"{label}{sep}upper_bound": 1.0 for label in label_encoder.base_labels}
     )
     print("[log] - Aaaaaaand let's tune <<|>>")
     study.optimize(objective, n_trials=n_trials, n_jobs=-1)

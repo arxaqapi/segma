@@ -144,12 +144,12 @@ def tune(
         thresholds = {
             label: {
                 "lower_bound": trial.suggest_float(
-                    name=f"{label}.lower_bound",
+                    name=f"{label}{sep}lower_bound",
                     low=0.0,
                     high=1.0,  # , step=0.01
                 ),
                 "upper_bound": trial.suggest_float(
-                    name=f"{label}.upper_bound",
+                    name=f"{label}{sep}upper_bound",
                     low=0.0,
                     high=1.0,  # , step=0.01
                 ),

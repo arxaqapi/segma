@@ -10,7 +10,7 @@ from segma.annotation import AudioAnnotation
 from segma.config.base import Config
 from segma.models.base import BaseSegmentationModel
 from segma.structs.interval import Interval, Intervals
-from segma.utils.conversions import frames_to_milliseconds
+from segma.utils.conversions import frames_to_seconds
 from segma.utils.encoders import (
     LabelEncoder,
     MultiLabelEncoder,
@@ -120,8 +120,8 @@ def interval_to_aa(intervals: Intervals, uri: str) -> list[AudioAnnotation]:
     return [
         AudioAnnotation(
             uid=uri,
-            start_time_ms=float(frames_to_milliseconds(start_f)),
-            duration_ms=float(frames_to_milliseconds(end_f - start_f)),
+            start_time_s=float(frames_to_seconds(start_f)),
+            duration_s=float(frames_to_seconds(end_f - start_f)),
             label=str(label),
         )
         for start_f, end_f, label in intervals
@@ -142,8 +142,8 @@ def write_intervals(intervals: Intervals, audio_path: Path, output_p: Path):
         for start_f, end_f, label in intervals:
             aa = AudioAnnotation(
                 uid=audio_path.stem,
-                start_time_ms=float(frames_to_milliseconds(start_f)),
-                duration_ms=float(frames_to_milliseconds(end_f - start_f)),
+                start_time_s=float(frames_to_seconds(start_f)),
+                duration_s=float(frames_to_seconds(end_f - start_f)),
                 label=str(label),
             )
             rttm_f.write(aa.to_rttm() + "\n")

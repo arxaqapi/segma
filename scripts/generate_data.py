@@ -1,77 +1,9 @@
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 from scipy.io import wavfile
 
-from segma.utils.conversions import millisecond_to_second, second_to_millisecond
-
-
-@dataclass
-class AudioAnnotation:
-    uid: str
-    start_time: float
-    """start_time in milliseconds"""
-    duration: float
-    """duration in milliseconds"""
-    label: str
-    """associated segment label"""
-
-    @classmethod
-    def read_line(cls, line: str):
-        uid, start_time, duration, label = line.strip().split(" ")
-        return cls(uid, float(start_time), float(duration), label)
-
-    @property
-    def start_time_s(self):
-        return millisecond_to_second(self.start_time)
-
-    @property
-    def duration_s(self):
-        return millisecond_to_second(self.duration)
-
-    @property
-    def end_time(self):
-        return self.start_time + self.duration
-
-    @property
-    def end_time_s(self):
-        return millisecond_to_second(self.end_time)
-
-    def write(self, n_digits: int = 6):
-        return f"{self.uid} {round(self.start_time, n_digits)} {round(self.duration, n_digits)} {self.label}"
-
-    def __str__(self) -> str:
-        return f"Annot for '{self.uid}': from {round(self.start_time_s, 6)} s to {round(self.start_time_s + self.duration_s, 6)} | seg duration: {round(self.duration_s, 4)} | labl: {self.label}"
-
-    def __repr__(self) -> str:
-        return self.write()
-
-    def to_rttm(self) -> str:
-        return " ".join(
-            [
-                "SPEAKER",
-                self.uid,
-                # "1",
-                "<NA>",
-                f"{round(self.start_time_s, 6)}",
-                f"{round(self.duration_s, 6)}",
-                "<NA> <NA>",
-                self.label,
-                "<NA> <NA>",
-            ]
-        )
-
-    @classmethod
-    def from_rttm(cls, line: str):
-        fields = line.strip().split(" ")
-        assert len(fields) == 10 or len(fields) == 9
-        cls(
-            uid=fields[1],
-            start_time=second_to_millisecond(float(fields[3])),
-            duration=second_to_millisecond(float(fields[4])),
-            label=fields[7],
-        )
+from segma.annotation import AudioAnnotation
 
 
 def gen_annots(
@@ -91,15 +23,17 @@ def gen_annots(
     # get n starting points
     starting_points_s = rng.uniform(0, audio_duration_s - max_annot_duration_s, size=n)
     # NOTE - second_to_millisecond
-    durations = second_to_millisecond(durations_s)
-    starting_points: np.ndarray = second_to_millisecond(starting_points_s)
+    # durations = second_to_millisecond(durations_s)
+    # starting_points: np.ndarray = second_to_millisecond(starting_points_s)
 
-    starting_points.sort()
+    starting_points_s.sort()
     label_idxs = rng.integers(len(labels), size=n)
 
     annotations = [
-        AudioAnnotation(uid=uid, start_time=s, duration=duration, label=labels[label_i])
-        for s, duration, label_i in zip(starting_points, durations, label_idxs)
+        AudioAnnotation(
+            uid=uid, start_time_s=start_s, duration_s=dur_s, label=labels[label_i]
+        )
+        for start_s, dur_s, label_i in zip(starting_points_s, durations_s, label_idxs)
     ]
     return annotations
 

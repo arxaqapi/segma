@@ -1,10 +1,7 @@
 from dataclasses import dataclass
 from typing import Self
 
-from .utils.conversions import (
-    millisecond_to_second,
-    second_to_millisecond,
-)
+from .utils.conversions import second_to_millisecond
 
 
 @dataclass
@@ -14,21 +11,22 @@ class AudioAnnotation:
 
     Attributes:
         uid (str): Unique identifier for the audio file (URI).
-        start_time_ms (float): Start time of the segment in milliseconds.
-        duration_ms (float): Duration of the segment in milliseconds.
+        start_time_s (float): Start time of the segment in seconds.
+        duration_s (float): Duration of the segment in seconds.
         label (str): Label associated with the segment.
     """
 
     uid: str
-    start_time_ms: float
-    duration_ms: float
+    start_time_s: float
+    duration_s: float
     label: str
+    PRECISION: int = 8
 
     @classmethod
     def read_line(cls, line: str) -> Self:
         """Parse a line containing space-separated values into an AudioAnnotation.
 
-        Expected format: `<uid> <start_time_ms> <duration_ms> <label>`
+        Expected format: `<uid> <start_time_s> <duration_s> <label>`
 
         Args:
             line (str): Input line to parse
@@ -40,22 +38,22 @@ class AudioAnnotation:
         return cls(uid, float(start_time), float(duration), label)
 
     @property
-    def start_time_s(self) -> float:
-        return millisecond_to_second(self.start_time_ms)
+    def start_time_ms(self) -> float:
+        return second_to_millisecond(self.start_time_s)
 
     @property
-    def duration_s(self) -> float:
-        return millisecond_to_second(self.duration_ms)
+    def duration_ms(self) -> float:
+        return second_to_millisecond(self.duration_s)
 
     @property
     def end_time_ms(self) -> float:
-        return self.start_time_ms + self.duration_ms
+        return second_to_millisecond(self.end_time_s)
 
     @property
     def end_time_s(self) -> float:
-        return millisecond_to_second(self.end_time_ms)
+        return self.start_time_s + self.duration_s
 
-    def write(self, n_digits: int = 6) -> str:
+    def write(self, n_digits: int = 8) -> str:
         """Serialize the annotation to a space-separated string.
 
         Args:
@@ -64,11 +62,11 @@ class AudioAnnotation:
         Returns:
             str: Formatted string representation.
         """
-        return f"{self.uid} {round(self.start_time_ms, n_digits)} {round(self.duration_ms, n_digits)} {self.label}"
+        return f"{self.uid} {round(self.start_time_s, n_digits)} {round(self.duration_s, n_digits)} {self.label}"
 
     def __str__(self) -> str:
         """Human-readable string representation of the annotation."""
-        return f"Annot for '{self.uid}': from {round(self.start_time_s, 6)} s to {round(self.start_time_s + self.duration_s, 6)} | seg duration: {round(self.duration_s, 4)} | label: {self.label}"
+        return f"Annot for '{self.uid}': from {round(self.start_time_s, self.PRECISION)} s to {round(self.end_time_s, self.PRECISION)} | seg duration: {round(self.duration_s, self.PRECISION)} | label: {self.label}"
 
     def __repr__(self) -> str:
         return self.write()
@@ -85,8 +83,8 @@ class AudioAnnotation:
                 self.uid,
                 # "1",
                 "<NA>",
-                f"{round(self.start_time_s, 6)}",
-                f"{round(self.duration_s, 6)}",
+                f"{round(self.start_time_s, self.PRECISION)}",
+                f"{round(self.duration_s, self.PRECISION)}",
                 "<NA> <NA>",
                 self.label,
                 "<NA> <NA>",
@@ -107,7 +105,7 @@ class AudioAnnotation:
         assert len(fields) == 10 or len(fields) == 9
         return cls(
             uid=fields[1],
-            start_time_ms=second_to_millisecond(float(fields[3])),
-            duration_ms=second_to_millisecond(float(fields[4])),
+            start_time_s=float(fields[3]),
+            duration_s=float(fields[4]),
             label=fields[7],
         )

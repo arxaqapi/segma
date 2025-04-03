@@ -108,7 +108,7 @@ def tune(
     dataset_to_tune_on: Path = Path("data/baby_train"),
     sep: str = ".",
 ) -> optuna.trial.FrozenTrial:
-    """Perform histerisis-tresholding tuning for MultiLabelSegmentation problems.
+    """Perform histerisis-thresholding tuning for MultiLabelSegmentation problems.
 
     Args:
         logits_p (Path): Path to saved logits to use for in-memory optimisation.
@@ -127,7 +127,7 @@ def tune(
     validation_gt_rttm = load_dataset_gt(
         uri_list_p=dataset_to_tune_on / "val.txt",
         rttm_p=dataset_to_tune_on / "rttm",
-        sub_sample=300,
+        # TODO - add percentage of the dataset as parameter
     )
     with (logits_p.parent.parent / "tune_uris.txt").open("w") as f:
         f.writelines([uri + "\n" for uri in validation_gt_rttm.keys()])
@@ -148,17 +148,13 @@ def tune(
                     low=0.0,
                     high=1.0,  # , step=0.01
                 ),
-                "upper_bound": trial.suggest_float(
-                    name=f"{label}{sep}upper_bound",
-                    low=0.0,
-                    high=1.0,  # , step=0.01
-                ),
+                "upper_bound": 1.0,
             }
             for label in label_encoder.base_labels
         }
         predictions = predict_all_logits(
             logits=logits,
-            tresholds=thresholds,
+            thresholds=thresholds,
             label_encoder=label_encoder,
         )
 
@@ -168,42 +164,54 @@ def tune(
             label_encoder=label_encoder,
         )
 
-    study = optuna.create_study(
-        direction="maximize", sampler=optuna.samplers.TPESampler()
-    )
+    # TODO - add sampler as param
+    sampler = optuna.samplers.TPESampler()
+    study = optuna.create_study(direction="maximize", sampler=sampler)
+
     # NOTE - create initial trial
     study.enqueue_trial(
         {f"{label}{sep}lower_bound": 0.5 for label in label_encoder.base_labels}
-        | {f"{label}{sep}upper_bound": 1.0 for label in label_encoder.base_labels}
+        # | {f"{label}{sep}upper_bound": 1.0 for label in label_encoder.base_labels}
     )
     print("[log] - Aaaaaaand let's tune <<|>>")
+    # TODO - add n_jobs as parameter
     study.optimize(objective, n_trials=n_trials, n_jobs=-1)
 
     return study.best_trial
 
 
-def treshold_dict_to_optuna(
-    treshold_p_dict: dict[str, dict[str, float]], sep: str = "."
+def threshold_dict_to_optuna(
+    threshold_p_dict: dict[str, dict[str, float]], sep: str = "."
 ) -> dict[str, float]:
+    """Transforms a nested dict with structure: `{label: {lower_bound: x, upper_bound: y}}`
+    to a flat representation with `sep` as level separators: `{"label[sep]lower_bound": ..., "label[sep]upper_bound": ...}`.
+
+    Args:
+        threshold_p_dict (dict[str, dict[str, float]]): Treshold dict loaded from disc
+        sep (str, optional): Separator to use for a flat representation. Defaults to ".".
+
+    Returns:
+        dict[str, float]: _description_
+    """
     params: dict[str, float] = {}
-    for label, tresholds in treshold_p_dict.items():
-        for treshold_name, value in tresholds.items():
-            params[sep.join((label, treshold_name))] = value
+    for label, thresholds in threshold_p_dict.items():
+        for threshold_name, value in thresholds.items():
+            params[sep.join((label, threshold_name))] = value
     return params
 
 
-def optuna_out_to_treshold_d(
+def optuna_out_to_threshold_d(
     optuna_param_dict: dict[str, float], sep: str = "."
 ) -> dict[str, dict[str, float]]:
     """Takes a flat dict with `sep` as hierarchy divider and creates a nested dict with
     structure: `{label: {lower_bound: x, upper_bound: y}}`.
 
     Args:
-        optuna_param_dict (dict[str, float]): Flat dictionary containing the optuna tresholds.
+        optuna_param_dict (dict[str, float]): Flat dictionary containing the optuna thresholds.
         sep (str, optional): Separator used to create . Defaults to ".".
 
     Returns:
-        dict[str, dict[str, float]]: mapping from labels to corresponding treshold dict.
+        dict[str, dict[str, float]]: mapping from labels to corresponding threshold dict.
     """
     params = defaultdict(dict)
     for value_name, value in optuna_param_dict.items():
@@ -240,7 +248,7 @@ if __name__ == "__main__":
         help="Dataset to use for tuning, should contain a 'val.txt' files.",
     )
     parser.add_argument(
-        "--output", required=True, help="Output folder of the tuned tresholds."
+        "--output", required=True, help="Output folder of the tuned thresholds."
     )
 
     args = parser.parse_args()
@@ -257,11 +265,16 @@ if __name__ == "__main__":
         dataset_to_tune_on=args.dataset,
     )
 
-    tresholds = optuna_out_to_treshold_d(best_trial.params)
+    thresholds = optuna_out_to_threshold_d(best_trial.params)
 
-    with (args.output / "tresholds.yml").open("w") as f:
-        yaml.safe_dump(tresholds, f)
+    # NOTE - fix threshnolds
+    thresholds = {
+        label: vals | {"upper_bound": 1.0} for label, vals in thresholds.items()
+    }
+
+    with (args.output / "thresholds.yml").open("w") as f:
+        yaml.safe_dump(thresholds, f)
 
     print(
-        f"[log] - found best trial with value: {best_trial.value} and parameters: \n{tresholds=}"
+        f"[log] - found best trial with value: {best_trial.value} and parameters: \n{thresholds=}"
     )

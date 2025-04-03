@@ -36,14 +36,14 @@ python -u scripts/tune.py \
 	--dataset $data_folder \
 	--output $base_path/$run_id
 
-# NOTE - 3. Evaluate on [all] test sets with and without tresholds
+# NOTE - 3. Evaluate on [all] test sets with and without threshold
 python -u scripts/predict.py \
 	--config $config \
 	--uris $data_folder/test.txt \
 	--wavs $data_folder/wav \
 	--ckpt $base_path/$run_id/checkpoints/last.ckpt \
 	--output $base_path/$run_id/out_test_t \
-	--tresholds $base_path/$run_id/tresholds.yml
+	--threshold $base_path/$run_id/threshold.yml
 
 data_folder="data/marvin_test"
 python -u scripts/predict.py \
@@ -52,7 +52,7 @@ python -u scripts/predict.py \
 	--wavs $data_folder/wav \
 	--ckpt $base_path/$run_id/checkpoints/last.ckpt \
 	--output $base_path/$run_id/out_test_marvin_t \
-	--tresholds $base_path/$run_id/tresholds.yml
+	--threshold $base_path/$run_id/threshold.yml
 
 data_folder="data/heldout"
 python -u scripts/predict.py \
@@ -61,4 +61,4 @@ python -u scripts/predict.py \
 	--wavs $data_folder/wav \
 	--ckpt $base_path/$run_id/checkpoints/last.ckpt \
 	--output $base_path/$run_id/out_test_heldout_t \
-	--tresholds $base_path/$run_id/tresholds.yml
+	--threshold $base_path/$run_id/threshold.yml

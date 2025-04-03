@@ -37,18 +37,18 @@ if __name__ == "__main__":
         help="If the prediction scripts saves the logits to disk, can be memory intensive.",
     )
     parser.add_argument(
-        "--tresholds",
-        help="If tresholds dict is given, perform predictions using tresholding.",
+        "--thresholds",
+        help="If thresholds dict is given, perform predictions using thresholding.",
     )
 
     args = parser.parse_args()
     args.wavs = Path(args.wavs)
     args.ckpt = Path(args.ckpt)
-    if args.tresholds is not None and Path(args.tresholds).exists():
-        with Path(args.tresholds).open("r") as f:
-            treshold_dict = yaml.safe_load(f)
+    if args.thresholds is not None and Path(args.thresholds).exists():
+        with Path(args.thresholds).open("r") as f:
+            threshold_dict = yaml.safe_load(f)
     else:
-        treshold_dict = None
+        threshold_dict = None
 
     if not args.wavs.exists():
         raise ValueError(f"Path `{args.wavs=}` does not exists")
@@ -94,7 +94,7 @@ if __name__ == "__main__":
                 output_p=args.output,
                 config=cfg,
                 save_logits=args.save_logits,
-                tresholds=treshold_dict,
+                thresholds=threshold_dict,
             )
     else:
         for wav_f in args.wavs.glob("*.wav"):
@@ -105,7 +105,7 @@ if __name__ == "__main__":
                 output_p=args.output,
                 config=cfg,
                 save_logits=args.save_logits,
-                tresholds=treshold_dict,
+                thresholds=threshold_dict,
             )
 
     # NOTE - symlink to models/last/[rttm|aa]

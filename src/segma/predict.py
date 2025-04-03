@@ -56,7 +56,7 @@ def load_all_logits(logits_p: Path | str) -> dict[str, np.ndarray]:
 
 def predict_all_logits(
     logits: dict[str, np.ndarray],
-    tresholds: dict[str, dict[str, float]],
+    thresholds: dict[str, dict[str, float]],
     label_encoder: LabelEncoder,
 ) -> dict[str, list[AudioAnnotation]]:
     """Given a dict `logits` that maps uris to logits, perform prediction for each loaded logit
@@ -64,30 +64,30 @@ def predict_all_logits(
 
     Args:
         logits (dict[str, np.ndarray]): _description_
-        tresholds (dict[str, dict[str, float]]): Treshold dict to take into account when predicting from logits.
+        thresholds (dict[str, dict[str, float]]): Treshold dict to take into account when predicting from logits.
         label_encoder (LabelEncoder): _description_
 
     Returns:
         dict[str, list[AudioAnnotation]]: A dict that maps an uri to the predicted annotations.
     """
     return {
-        uri: predict_from_logits_with_tresholds(logit, uri, tresholds, label_encoder)
+        uri: predict_from_logits_with_thresholds(logit, uri, thresholds, label_encoder)
         for uri, logit in logits.items()
     }
 
 
-def predict_from_logits_with_tresholds(
+def predict_from_logits_with_thresholds(
     logits: np.ndarray,
     uri: str,
-    tresholds: dict[str, dict[str, float]],
+    thresholds: dict[str, dict[str, float]],
     label_encoder: LabelEncoder,
 ) -> list[AudioAnnotation]:
-    """Given a logit array, its corresponding uri and the tresholds to use, perform
+    """Given a logit array, its corresponding uri and the thresholds to use, perform
 
     Args:
         logits (np.ndarray): _description_
         uri (str): _description_
-        tresholds (dict[str, dict[str, float]]): _description_
+        thresholds (dict[str, dict[str, float]]): _description_
         label_encoder (LabelEncoder): _description_
 
     Returns:
@@ -101,9 +101,9 @@ def predict_from_logits_with_tresholds(
         # logit: (4,)
         for label_logit, label in zip(logit, label_encoder.base_labels):
             if (
-                tresholds[label]["lower_bound"]
+                thresholds[label]["lower_bound"]
                 <= label_logit
-                <= tresholds[label]["upper_bound"]
+                <= thresholds[label]["upper_bound"]
             ):
                 corresponding_interval: Interval = (
                     start_f,
@@ -157,7 +157,7 @@ def sliding_prediction(
     output_p: Path,
     config: Config,
     save_logits: bool = False,
-    tresholds: dict[str, dict[str, float]] | None = None,
+    thresholds: dict[str, dict[str, float]] | None = None,
 ):
     """do not open audio entirely
     - perform slide-wise"""
@@ -245,11 +245,11 @@ def sliding_prediction(
             for key, head_output_t in output_t.items():
                 head_label = key.removeprefix("linear_head_")
                 for batch_i, batch in enumerate(head_output_t):
-                    if tresholds is not None:
-                        # NOTE - treshold batch
+                    if thresholds is not None:
+                        # NOTE - thresholds batch
                         label_prediction = (
-                            (batch >= tresholds[head_label]["lower_bound"])
-                            & (batch <= tresholds[head_label]["upper_bound"])
+                            (batch >= thresholds[head_label]["lower_bound"])
+                            & (batch <= thresholds[head_label]["upper_bound"])
                         ).int()
                     else:
                         # NOTE - use base value of 0.5 for tresholding

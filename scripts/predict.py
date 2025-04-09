@@ -7,7 +7,6 @@ import yaml
 from segma.config import Config, load_config
 from segma.models import Models
 from segma.predict import sliding_prediction
-from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -57,11 +56,6 @@ if __name__ == "__main__":
 
     cfg: Config = load_config(args.config)
 
-    if "hydra" in cfg.model.name:
-        l_encoder = MultiLabelEncoder(labels=cfg.data.classes)
-    else:
-        l_encoder = PowersetMultiLabelEncoder(labels=cfg.data.classes)
-
     # NOTE - resolve output_path
     # if path is model/last/best -> resolve symlink
     if args.output is None and str(args.ckpt) == "models/last/best.ckpt":
@@ -76,7 +70,7 @@ if __name__ == "__main__":
 
     # REVIEW
     model = Models[cfg.model.name].load_from_checkpoint(
-        checkpoint_path=args.ckpt, label_encoder=l_encoder, config=cfg
+        checkpoint_path=args.ckpt, config=cfg
     )
 
     model.to(torch.device("mps" if torch.backends.mps.is_available() else "cuda"))

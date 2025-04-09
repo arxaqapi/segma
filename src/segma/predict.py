@@ -233,7 +233,7 @@ def sliding_prediction(
                     torch.device("mps" if torch.backends.mps.is_available() else "cuda")
                 )
             )
-            if "hydra" in config.model.name:
+            if isinstance(model.label_encoder, MultiLabelEncoder):
                 for key, head_output_t in output_t.items():
                     output_t[key] = torch.nn.functional.sigmoid(head_output_t)
 

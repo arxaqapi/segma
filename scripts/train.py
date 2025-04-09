@@ -29,7 +29,6 @@ from segma.models import (
     WhisperiMax,
 )
 from segma.utils import set_seed
-from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
 
 
 def get_metric(metric: str) -> tuple[Literal["min", "max"], str]:
@@ -78,11 +77,6 @@ if __name__ == "__main__":
     if not chkp_path.exists():
         chkp_path.mkdir()
 
-    if "hydra" in cfg.model.name:
-        l_encoder = MultiLabelEncoder(labels=cfg.data.classes)
-    else:
-        l_encoder = PowersetMultiLabelEncoder(labels=cfg.data.classes)
-
     model: (
         Whisperidou
         | WhisperiMax
@@ -90,7 +84,8 @@ if __name__ == "__main__":
         | PyanNetSlim
         | SurgicalWhisper
         | HydraWhisper
-    ) = Models[cfg.model.name](l_encoder, cfg)
+    ) = Models[cfg.model.name](cfg)
+    l_encoder = model.label_encoder
 
     mode, monitor = get_metric(cfg.train.validation_metric)
 

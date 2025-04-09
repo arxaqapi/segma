@@ -29,7 +29,6 @@ from segma.models import (
     WhisperiMax,
 )
 from segma.utils import set_seed
-from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
 from segma.utils.experiment import new_experiment_id
 
 
@@ -90,11 +89,6 @@ if __name__ == "__main__":
     if not experiment_path.exists():
         experiment_path.mkdir()
 
-    if "hydra" in config.model.name:
-        l_encoder = MultiLabelEncoder(labels=config.data.classes)
-    else:
-        l_encoder = PowersetMultiLabelEncoder(labels=config.data.classes)
-
     model: (
         Whisperidou
         | WhisperiMax
@@ -102,7 +96,8 @@ if __name__ == "__main__":
         | PyanNetSlim
         | SurgicalWhisper
         | HydraWhisper
-    ) = Models[config.model.name](l_encoder, config)
+    ) = Models[config.model.name](config)
+    l_encoder = model.label_encoder
 
     mode, monitor = get_metric(config.train.validation_metric)
 

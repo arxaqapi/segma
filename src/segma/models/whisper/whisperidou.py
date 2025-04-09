@@ -4,18 +4,14 @@ from transformers.modeling_outputs import BaseModelOutput
 
 from segma.config.base import Config
 from segma.models.base import BaseSegmentationModel, ConvolutionSettings
-from segma.utils.encoders import LabelEncoder
+from segma.utils.encoders import PowersetMultiLabelEncoder
 
 from .utils import load_whisper
 
 
 class Whisperidou(BaseSegmentationModel):
-    def __init__(
-        self, label_encoder: LabelEncoder, config: Config, weight_loss: bool = False
-    ) -> None:
-        super().__init__(
-            label_encoder=label_encoder, config=config, weight_loss=weight_loss
-        )
+    def __init__(self, config: Config, weight_loss: bool = False) -> None:
+        super().__init__(config=config, weight_loss=weight_loss)
 
         self.feature_extractor, self.w_encoder = load_whisper(
             self.config.model.config.encoder
@@ -24,12 +20,16 @@ class Whisperidou(BaseSegmentationModel):
         self.classifier = nn.Sequential(
             nn.Linear(self.w_encoder.config.d_model, 256),
             nn.ReLU(),
-            nn.Linear(256, len(label_encoder.labels)),
+            nn.Linear(256, len(self.label_encoder.labels)),
         )
 
         self.conv_settings = ConvolutionSettings(
             kernels=(400, 3, 3), strides=(160, 1, 2), paddings=(200, 1, 1)
         )
+
+    @classmethod
+    def get_label_encoder(cls, config: Config) -> PowersetMultiLabelEncoder:
+        return PowersetMultiLabelEncoder(config.data.classes)
 
     def forward(self, x: torch.Tensor):
         enc_x: BaseModelOutput = self.w_encoder(x)

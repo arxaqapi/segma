@@ -5,7 +5,7 @@ from transformers.modeling_outputs import BaseModelOutput
 
 from segma.config.base import Config
 from segma.models.base import BaseSegmentationModel, ConvolutionSettings
-from segma.utils.encoders import LabelEncoder, MultiLabelEncoder
+from segma.utils.encoders import MultiLabelEncoder
 
 from .utils import load_whisper
 
@@ -13,14 +13,11 @@ from .utils import load_whisper
 class SurgicalHydra(BaseSegmentationModel):
     def __init__(
         self,
-        label_encoder: LabelEncoder,
         config: Config,
         weight_loss: bool = False,
         loss_f: str = "bce",
     ) -> None:
-        super().__init__(label_encoder, config, weight_loss)
-        if not isinstance(label_encoder, MultiLabelEncoder):
-            raise ValueError("Only MultiLabelEncoder is accepted for HydraWhisper.")
+        super().__init__(config, weight_loss)
 
         self.feature_extractor, self.w_encoder = load_whisper(
             self.config.model.config.encoder
@@ -69,7 +66,7 @@ class SurgicalHydra(BaseSegmentationModel):
         self.task_heads = nn.ModuleDict(
             {
                 f"linear_head_{label}": nn.Linear(lstm_out_features, 1)
-                for label in label_encoder.base_labels
+                for label in self.label_encoder.base_labels
             }
         )
 
@@ -110,6 +107,10 @@ class SurgicalHydra(BaseSegmentationModel):
             # name: nn.functional.sigmoid(head(lstm_out))
             for name, head in self.task_heads.items()
         }
+
+    @classmethod
+    def get_label_encoder(cls, config: Config) -> MultiLabelEncoder:
+        return MultiLabelEncoder(config.data.classes)
 
     def training_step(self, batch, batch_idx):
         x = batch["x"]

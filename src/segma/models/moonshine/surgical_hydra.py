@@ -1,13 +1,10 @@
 from segma.config.base import Config
 from segma.models.base import BaseSegmentationModel, ConvolutionSettings
-from segma.utils.encoders import LabelEncoder
 
 
 class Luna(BaseSegmentationModel):
-    def __init__(
-        self, label_encoder: LabelEncoder, config: Config, weight_loss: bool = False
-    ) -> None:
-        super().__init__(label_encoder, config, weight_loss)
+    def __init__(self, config: Config, weight_loss: bool = False) -> None:
+        super().__init__(config, weight_loss)
         raise NotImplementedError
 
         # NOTE - load moonshine encoder

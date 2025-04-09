@@ -3,7 +3,6 @@ import yaml
 
 from segma.config.base import Config, load_config
 from segma.models import Models
-from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
 
 
 def test_setup_gen_conf():
@@ -20,37 +19,27 @@ def test_setup_gen_conf():
 
 
 def test_models():
-    labels = ("MAL", "FEM", "KCHI", "OCH")
-
     for model_name, model_c in Models.items():
-        label_encoder = (
-            MultiLabelEncoder(labels)
-            if "hydra" in model_name
-            else PowersetMultiLabelEncoder(labels)
-        )
         cfg: Config = load_config(
             config_path=f"tests/sample/temp_config_{model_name}.yml",
         )
-        model = model_c(label_encoder, cfg)
+        model = model_c(cfg)
         assert model is not None
+        assert model.label_encoder.base_labels == ("KCHI", "OCH", "MAL", "FEM")
 
 
+# https://docs.pytest.org/en/6.2.x/parametrize.html
+# https://medium.com/optuna/overview-of-python-free-threading-v3-13t-support-in-optuna-ad9ab62a11ba
 def test_Whisper_based_forward():
-    labels = ("aa", "bb", "cc")
-
     x_t = torch.ones((1, 80, 3000))
 
     for model_name, model_c in Models.items():
         if "whisper" in model_name or "hydra" in model_name:
-            label_encoder = (
-                MultiLabelEncoder(labels)
-                if "hydra" in model_name
-                else PowersetMultiLabelEncoder(labels)
-            )
             cfg: Config = load_config(
                 config_path=f"tests/sample/temp_config_{model_name}.yml",
             )
-            _out = model_c(label_encoder, cfg)(x_t)
+            model = model_c(cfg)
+            model(x_t)
 
 
 def test_cleanup():

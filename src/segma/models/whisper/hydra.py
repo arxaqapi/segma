@@ -7,7 +7,7 @@ from transformers.modeling_outputs import BaseModelOutput
 
 from segma.config.base import Config
 from segma.models.base import BaseSegmentationModel, ConvolutionSettings
-from segma.utils.encoders import LabelEncoder, MultiLabelEncoder
+from segma.utils.encoders import MultiLabelEncoder
 
 from .utils import load_whisper
 
@@ -32,14 +32,11 @@ class HydraWhisper(BaseSegmentationModel):
 
     def __init__(
         self,
-        label_encoder: LabelEncoder,
         config: Config,
         weight_loss: bool = False,
         loss_f: str = "bce",
     ) -> None:
-        super().__init__(label_encoder, config, weight_loss)
-        if not isinstance(label_encoder, MultiLabelEncoder):
-            raise ValueError("Only MultiLabelEncoder is accepted for HydraWhisper.")
+        super().__init__(config, weight_loss)
 
         self.feature_extractor, self.w_encoder = load_whisper(
             self.config.model.config.encoder
@@ -60,13 +57,17 @@ class HydraWhisper(BaseSegmentationModel):
         self.task_heads = nn.ModuleDict(
             {
                 f"linear_head_{label}": nn.Linear(lstm_out_features, 1)
-                for label in label_encoder.base_labels
+                for label in self.label_encoder.base_labels
             }
         )
 
         self.conv_settings = ConvolutionSettings(
             kernels=(400, 3, 3), strides=(160, 1, 2), paddings=(200, 1, 1)
         )
+
+    @classmethod
+    def get_label_encoder(cls, config: Config) -> MultiLabelEncoder:
+        return MultiLabelEncoder(config.data.classes)
 
     def forward(self, x: torch.Tensor):
         enc_x: BaseModelOutput = self.w_encoder(x).last_hidden_state

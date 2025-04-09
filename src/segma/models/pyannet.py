@@ -7,7 +7,7 @@ from torchmetrics.functional.classification import multiclass_auroc, multiclass_
 
 from segma.config.base import Config
 from segma.models.base import BaseSegmentationModel, ConvolutionSettings
-from segma.utils.encoders import LabelEncoder
+from segma.utils.encoders import PowersetMultiLabelEncoder
 
 
 class SincNet(nn.Module):
@@ -101,13 +101,10 @@ class PyanNet(BaseSegmentationModel):
 
     def __init__(
         self,
-        label_encoder: LabelEncoder,
         config: Config,
         weight_loss: bool = False,
     ):
-        super().__init__(
-            label_encoder=label_encoder, config=config, weight_loss=weight_loss
-        )
+        super().__init__(config=config, weight_loss=weight_loss)
 
         sincnet = self.config.model.config.sincnet
         lstm_c = self.config.model.config.lstm
@@ -150,6 +147,10 @@ class PyanNet(BaseSegmentationModel):
             paddings=(0, 0, 0, 0, 0, 0),
         )
 
+    @classmethod
+    def get_label_encoder(cls, config: Config) -> PowersetMultiLabelEncoder:
+        return PowersetMultiLabelEncoder(config.data.classes)
+
     def forward(self, waveforms: torch.Tensor) -> torch.Tensor:
         """Pass forward
 
@@ -178,12 +179,8 @@ class PyanNet(BaseSegmentationModel):
 
 
 class PyanNetSlim(BaseSegmentationModel):
-    def __init__(
-        self, label_encoder: LabelEncoder, config: Config, weight_loss: bool = False
-    ):
-        super().__init__(
-            label_encoder=label_encoder, config=config, weight_loss=weight_loss
-        )
+    def __init__(self, config: Config, weight_loss: bool = False):
+        super().__init__(config=config, weight_loss=weight_loss)
 
         sincnet = self.config.model.config.sincnet
 
@@ -216,6 +213,10 @@ class PyanNetSlim(BaseSegmentationModel):
             strides=(self.sincnet.stride, 3, 1, 3, 1, 3),
             paddings=(0, 0, 0, 0, 0, 0),
         )
+
+    @classmethod
+    def get_label_encoder(cls, config: Config) -> PowersetMultiLabelEncoder:
+        return PowersetMultiLabelEncoder(config.data.classes)
 
     def forward(self, waveforms: torch.Tensor) -> torch.Tensor:
         """Pass forward

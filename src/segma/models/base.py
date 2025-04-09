@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from dataclasses import dataclass
 from functools import reduce
 from math import floor, prod
@@ -123,11 +124,9 @@ class ConvolutionSettings:
 
 
 class BaseSegmentationModel(pl.LightningModule):
-    def __init__(
-        self, label_encoder: LabelEncoder, config: Config, weight_loss: bool
-    ) -> None:
+    def __init__(self, config: Config, weight_loss: bool) -> None:
         super().__init__()
-        self.label_encoder = label_encoder
+        self.label_encoder = self.get_label_encoder(config)
         self.config = config
         self.weights = (
             torch.tensor(
@@ -141,6 +140,11 @@ class BaseSegmentationModel(pl.LightningModule):
         )
 
         self.save_hyperparameters(self.config.as_dict())
+
+    @classmethod
+    @abstractmethod
+    def get_label_encoder(cls, config: Config) -> LabelEncoder:
+        raise NotImplementedError
 
     def audio_preparation_hook(self, audio_t):
         """should be overwritten in the child class,

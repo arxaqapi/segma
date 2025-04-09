@@ -23,7 +23,6 @@ from segma.utils.conversions import (
     seconds_to_frames,
 )
 from segma.utils.encoders import LabelEncoder
-from segma.utils.receptive_fields import rf_end_i, rf_start_i
 
 
 def load_uris(file_p: Path) -> list[str]:
@@ -473,15 +472,7 @@ def generate_frames(
         chunk_duration_f=chunk_duration_f, strict=strict
     )
     windows = [
-        [
-            rf_start_i(i, conv_settings.strides, conv_settings.paddings),
-            rf_end_i(
-                i,
-                conv_settings.kernels,
-                conv_settings.strides,
-                conv_settings.paddings,
-            ),
-        ]
+        [conv_settings.rf_start_i(i), conv_settings.rf_end_i(i)]
         for i in range(n_windows)
     ]
     # REVIEW - add -1 to chunk_duration_s ??

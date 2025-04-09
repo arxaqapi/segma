@@ -80,6 +80,11 @@ if __name__ == "__main__":
     )
 
     model.to(torch.device("mps" if torch.backends.mps.is_available() else "cuda"))
+    if cfg.model.name in ("hydra_whisper", "HydraWhisper"):
+        torch._dynamo.config.accumulated_cache_size_limit = 32
+        if hasattr(torch._dynamo.config, "cache_size_limit"):
+            torch._dynamo.config.cache_size_limit = 32
+        model = torch.compile(model)
 
     # NOTE if args.uris: path is known
     if args.uris:

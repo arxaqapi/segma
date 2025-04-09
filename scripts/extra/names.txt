@@ -46,7 +46,7 @@ buse-echasse
 sar-commun
 aucon
 thazard-raye
-ronce-d'aure
+ronce-daure
 jaguarondi
 rouquie
 clione-jaune
@@ -124,7 +124,7 @@ ours-noir
 spisule
 nable
 fiatone
-tete-d'ane
+tete-dane
 tile-chameau
 oursin-plat
 matrasso
@@ -200,7 +200,7 @@ heron-typhon
 verdoun
 ibis-chauve
 poisson-lune
-müsaru-durin
+musaru-durin
 tarpon
 merou-noir
 comteux
@@ -262,7 +262,7 @@ souris-jaune
 sprot
 raie-rosette
 goemon
-pied-d'ane
+pied-dane
 hareng-gras
 roussettes
 touraco-gris
@@ -451,11 +451,11 @@ tyran-geant
 canard-bride
 sole-ocellee
 cisco-de-lac
-pied-d'oie
+pied-doie
 muge
 fiela
 canard-huppe
-cugüu
+cuguu
 tohi-masque
 obelie
 claviere
@@ -504,7 +504,7 @@ violet
 otolithe
 zerra
 gapareau
-c'hi-bastard
+chi-bastard
 nason-brun
 pageot
 anguiello
@@ -530,7 +530,7 @@ voilier
 petit-negre
 petaijde
 oie-empereur
-poule-d'eau
+poule-deau
 amour-blanc
 palee
 mole
@@ -569,7 +569,7 @@ dragonet
 alevin
 astronotus
 limberts
-merou-d'or
+merou-dor
 carreau
 vivaneau-job
 mulet-mopiro
@@ -644,7 +644,7 @@ tamarin
 risdæl
 vermeille
 requin-tchi
-anoli-d'doak
+anoli-ddoak
 calandre-fil
 ronce-cachee
 oursin-noir
@@ -685,9 +685,9 @@ pou-du-boeuf
 trembleur
 barraud
 uranoscopes
-rale-d'eau
+rale-deau
 bar-commun
-l'apollon
+lapollon
 lancette
 alose
 aguio
@@ -822,7 +822,7 @@ ti-yeux
 sourcils
 saumon-chien
 grondin-lyre
-l'-aurore
+l-aurore
 ivano
 ronce-omale
 sole-jaune
@@ -917,7 +917,7 @@ barbet-raye
 couvreux
 vachette
 coulirou
-pei-d'ardge
+pei-dardge
 ferit
 cyprin-sucet
 gobie-nageur
@@ -964,7 +964,7 @@ acara-maroni
 corneilles
 melose
 saumon-royal
-ronce-aigüe
+ronce-aigue
 boucanelle
 reagris
 nato
@@ -983,7 +983,7 @@ triple-queue
 crocro
 olive-de-mer
 sterlet
-ronce-d'albi
+ronce-dalbi
 raiton
 porque
 ronce-ridee
@@ -1013,7 +1013,7 @@ picot-gris
 anges-de-mer
 juliana
 anchois-haut
-hürling
+hurling
 cartinau
 bar-victoria
 brûlots
@@ -1031,7 +1031,7 @@ oie-rieuse
 ronce-scabre
 serval
 sap-sap
-perche-d'or
+perche-dor
 mulet-large
 rouzau
 rameur
@@ -1166,7 +1166,7 @@ esturien
 mene-bleu
 vernis
 neon
-ronce-d'erce
+ronce-derce
 corail-palme
 nette-brune
 orratza
@@ -1243,7 +1243,7 @@ brell
 scorpenides
 rales
 babiane
-müsaro
+musaro
 peskar-goat
 mord-pointu
 gambusie
@@ -1274,7 +1274,7 @@ cavillone
 donzelles
 narcinides
 chandelle
-maraîche
+maraiche
 hocco-mitou
 gaterin-noir
 saumon-masou
@@ -1354,7 +1354,7 @@ raie-ronde
 bounicou
 sifflet
 coulouhou
-z'anchois
+zanchois
 syngnathe
 jaune-thomas
 vericle
@@ -1438,7 +1438,7 @@ lump
 guidon
 bitterling
 vengeron
-ronce-d'acon
+ronce-dacon
 greuillet
 listao
 ranzania
@@ -1495,7 +1495,7 @@ lezia
 mulet-blanc
 paoua
 bossu-dore
-melon-d'eau
+melon-deau
 pageau
 mamila-arabe
 ronce-tendre
@@ -1581,7 +1581,7 @@ saurels
 vers-gris
 membranipore
 longue-flûte
-z'-orphie
+z-orphie
 rite-targeur
 sole-poivree
 saran
@@ -1630,7 +1630,7 @@ jacana-nain
 ormeau
 couteau
 maskinonge
-merou-d'île
+merou-dile
 goret-belier
 vimbe
 caracole
@@ -1719,7 +1719,7 @@ caduchon
 coryphenes
 muge-muga
 fanfre
-ronce-d'ars
+ronce-dars
 sorbe
 lote
 gobie-kokou
@@ -1765,7 +1765,7 @@ jaguar
 gobi-de-tas
 ara-rouge
 colin-barre
-talître
+talitre
 marsouins
 pampe
 cabot-truite
@@ -1799,7 +1799,7 @@ cyprinodonte
 seriole
 morrude
 chien-nain
-coq-d'inde
+coq-dinde
 ronce-gardee
 cascudo
 distichodus
@@ -1913,7 +1913,7 @@ charbonnier
 lavignon
 claveline
 buse-cendree
-ronce-d'orlu
+ronce-dorlu
 sarde-jaune
 lampe-cornee
 comete-ruban
@@ -1958,7 +1958,7 @@ calmar
 ibis-rouge
 labre-diane
 carandine
-ronce-d'amne
+ronce-damne
 ver-a-soie
 chimeres
 verrue-rayee
@@ -2157,7 +2157,7 @@ ronce-vetue
 tohi-citrin
 tunar
 requin-mako
-huîtriers
+huitriers
 coureuse
 motmot-roux
 ravanesco
@@ -2214,7 +2214,7 @@ spare-doree
 gressling
 coulihou
 chat-marbre
-ronce-d'is
+ronce-dis
 grillons
 langue-terne
 auxide
@@ -2238,7 +2238,7 @@ bar-mouchete
 borrico
 fanfre-noir
 sole-fasciee
-crabe-maître
+crabe-maitre
 calambe
 abadioa
 salamandres
@@ -2310,7 +2310,7 @@ coua-geant
 piaye-nain
 bigorneau
 flûte
-sardine-d'or
+sardine-dor
 gofi
 mulet-rond
 merou-coq
@@ -2357,7 +2357,7 @@ sagre-chien
 kakatoi-vert
 astouriou
 porqua
-buse-d'hawai
+buse-dhawai
 liche
 anoli-indien
 maquereaux
@@ -2410,7 +2410,7 @@ grande-alose
 merlan
 fritures
 barracouda
-ronce-d'alix
+ronce-dalix
 caesio-rose
 sprat
 punaises
@@ -2462,13 +2462,13 @@ flet-etoile
 grand-moro
 orphie
 raie-bouclee
-tohi-d'abert
+tohi-dabert
 grammatides
 goret-bossu
 carabes
 grondin-gris
 felat
-mene-d'herbe
+mene-dherbe
 mulet
 dente
 faisan-noble
@@ -2614,7 +2614,7 @@ queue-de-rat
 barbet
 lynx-roux
 merou-arcane
-müsaru
+musaru
 crabe-commun
 louvereaux
 truite-grise
@@ -2676,7 +2676,7 @@ entelure
 hypostome
 rousse
 arengue
-raie-d'eaton
+raie-deaton
 garmot
 ramada
 canard-pilet
@@ -2819,7 +2819,7 @@ perche-noire
 bourgette
 mora
 more-delicat
-patte-d'oie
+patte-doie
 mugo-fangous
 magnotte
 conure-naine
@@ -2829,7 +2829,7 @@ fletan
 buses
 elenie-sara
 epervier
-ronce-d'aire
+ronce-daire
 thazard-noir
 officier
 pucelage
@@ -2921,7 +2921,7 @@ dourmillouse
 squale-liche
 cabot-noir
 pougau
-peau-d'ane
+peau-dane
 tile-clown
 natice
 argus-ocelle
@@ -3029,7 +3029,7 @@ menhaden
 sapater
 dore
 suce-roseaux
-huître-plate
+huitre-plate
 exocet-ome
 tazard
 lune
@@ -3039,7 +3039,7 @@ mulet-so-iuy
 makaire-noir
 puce-du-rat
 mene-baton
-huîtrier-pie
+huitrier-pie
 saupe
 cetaces
 heron-cendre
@@ -3060,7 +3060,7 @@ scorpene
 ronfleur
 singe-de-mer
 chat-bai
-alose-d'ete
+alose-dete
 capoutchin
 mounge
 pagre

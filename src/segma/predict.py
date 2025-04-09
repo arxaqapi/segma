@@ -158,11 +158,11 @@ def sliding_prediction(
     config: Config,
     save_logits: bool = False,
     thresholds: dict[str, dict[str, float]] | None = None,
+    batch_size: int = 128,
 ):
     """do not open audio entirely
     - perform slide-wise"""
     model.eval()
-    batch_size = 32
     chunck_size_f = int(config.audio.chunk_duration_s) * config.audio.sample_rate
     meta_b_size = batch_size * chunck_size_f
 
@@ -170,7 +170,7 @@ def sliding_prediction(
     number_frames = audio_info.num_frames
 
     max_meta_batches = ceil(number_frames / meta_b_size)
-    # NOTE - for each meta_batch pass 32 batches through the model
+    # NOTE - for each meta_batch pass `batch_size` batches through the model
     reference_windows = gen_bounds(
         max_value=chunck_size_f, clip_values=(0, chunck_size_f)
     )[

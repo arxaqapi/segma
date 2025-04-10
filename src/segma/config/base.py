@@ -139,6 +139,11 @@ class SurgicalHydraConfig(BaseConfig):
     lstm: LSTMConfig
     classifier: int
 
+@dataclass
+class HydraWavLMConfig(BaseConfig):
+    wav_encoder: str
+    lstm: LSTMConfig
+    classifier: int
 
 @dataclass
 class ModelConfig(BaseConfig):
@@ -153,6 +158,7 @@ class ModelConfig(BaseConfig):
         | SurgicalWhisperConfig
         | HydraWhisperConfig
         | SurgicalHydraConfig
+        | HydraWavLMConfig
     )
 
 

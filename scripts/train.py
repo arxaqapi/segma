@@ -27,6 +27,7 @@ from segma.models import (
     SurgicalWhisper,
     Whisperidou,
     WhisperiMax,
+    HydraWavLM,
 )
 from segma.utils import set_seed
 from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
@@ -90,6 +91,7 @@ if __name__ == "__main__":
         | PyanNetSlim
         | SurgicalWhisper
         | HydraWhisper
+        | HydraWavLM
     ) = Models[cfg.model.name](l_encoder, cfg)
 
     mode, monitor = get_metric(cfg.train.validation_metric)

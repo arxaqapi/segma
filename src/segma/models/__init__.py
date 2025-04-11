@@ -7,6 +7,7 @@ from .whisper.whisperidou import Whisperidou
 from .whisper.whisperimax import WhisperiMax
 
 from .wavlm.hydra import HydraWavLM
+from .wavlm.surgical_hydra import SurgicalHydraWavLM
 
 Models = {
     "whisperidou": Whisperidou,
@@ -16,7 +17,8 @@ Models = {
     "surgical_whisper": SurgicalWhisper,
     "hydra_whisper": HydraWhisper,
     "surgical_hydra": SurgicalHydra,
-    "wavlm_hydra": HydraWavLM
+    "wavlm_hydra": HydraWavLM,
+    "surgical_wavlm_hydra": SurgicalHydraWavLM
 }
 
 
@@ -29,5 +31,6 @@ __all__ = [
     "HydraWhisper",
     "SurgicalHydra",
     "HydraWavLM"
+    "SurgicalHydraWavLM"
     "Models",
 ]

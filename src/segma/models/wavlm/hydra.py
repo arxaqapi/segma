@@ -56,14 +56,8 @@ class HydraWavLM(BaseSegmentationModel):
 
         # NOTE - copied from whisper/hydra.py
     def forward(self, x: torch.Tensor):
-        print(x.shape)
         enc_x: BaseModelOutput = self.encoder(x).last_hidden_state
-        # Since whisper expects 30s audio segments as input (480_000 frames)
-        # we have to truncate the output to only cover 2s of audio
-        truncation_i = self.conv_settings.n_windows(
-            self.config.audio.chunk_duration_f, strict=True
-        )
-        print(enc_x.shape)
+        
         # (batch, 99, lstm.hidden_size)
         lstm_out, _ = self.lstm_shared(enc_x)
         return {

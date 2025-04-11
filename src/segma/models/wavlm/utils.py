@@ -11,4 +11,4 @@ def load_wavlm(path: Path | str):
     for param in model.parameters():
             param.requires_grad = False
     model.freeze_feature_encoder()
-    return model
+    return model.feature_extractor, model

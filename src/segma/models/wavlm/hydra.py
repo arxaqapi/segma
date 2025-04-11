@@ -26,11 +26,10 @@ class HydraWavLM(BaseSegmentationModel):
         if not isinstance(label_encoder, MultiLabelEncoder):
             raise ValueError("Only MultiLabelEncoder is accepted for HydraWavLM.")
         
-        self.encoder = load_wavlm(
+        self.feature_extractor, self.encoder = load_wavlm(
             self.config.model.config.wav_encoder
         )
-        self.feature_extractor = self.encoder.feature_extractor
-        
+                
         self.lstm_shared = nn.LSTM(
             input_size=self.encoder.config.output_hidden_size,
             **config.model.config.lstm.as_dict(),

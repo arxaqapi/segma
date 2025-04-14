@@ -1,5 +1,3 @@
-from dataclasses import dataclass
-
 import torch
 import torch.nn as nn
 from torchmetrics.functional.classification import binary_f1_score
@@ -11,10 +9,9 @@ from segma.utils.encoders import LabelEncoder, MultiLabelEncoder
 
 from .utils import load_wavlm
 
-#NOTE - Heavily copied from whisper/hydra.py
+
+# NOTE - Heavily copied from whisper/hydra.py
 class HydraWavLM(BaseSegmentationModel):
-
-
     def __init__(
         self,
         label_encoder: LabelEncoder,
@@ -25,11 +22,11 @@ class HydraWavLM(BaseSegmentationModel):
         super().__init__(label_encoder, config, weight_loss)
         if not isinstance(label_encoder, MultiLabelEncoder):
             raise ValueError("Only MultiLabelEncoder is accepted for HydraWavLM.")
-        
+
         self.feature_extractor, self.encoder = load_wavlm(
             self.config.model.config.wav_encoder
         )
-                
+
         self.lstm_shared = nn.LSTM(
             input_size=self.encoder.config.output_hidden_size,
             **config.model.config.lstm.as_dict(),
@@ -50,14 +47,16 @@ class HydraWavLM(BaseSegmentationModel):
         )
 
         self.conv_settings = ConvolutionSettings(
-            kernels=(10, 3,3,3,3, 2,2), strides=(5, 2,2,2,2, 2,2), paddings=(0, 0,0,0,0, 0,0)
+            kernels=(10, 3, 3, 3, 3, 2, 2),
+            strides=(5, 2, 2, 2, 2, 2, 2),
+            paddings=(0, 0, 0, 0, 0, 0, 0),
         )
 
-
         # NOTE - copied from whisper/hydra.py
+
     def forward(self, x: torch.Tensor):
         enc_x: BaseModelOutput = self.encoder(x).last_hidden_state
-        
+
         # (batch, 99, lstm.hidden_size)
         lstm_out, _ = self.lstm_shared(enc_x)
         return {
@@ -65,7 +64,7 @@ class HydraWavLM(BaseSegmentationModel):
             # NOTE - sigmoid is added in BCEWithLogitsLoss, return only logits
             # name: nn.functional.sigmoid(head(lstm_out))
             for name, head in self.task_heads.items()
-        } 
+        }
 
     def training_step(self, batch, batch_idx):
         x = batch["x"]
@@ -171,6 +170,3 @@ class HydraWavLM(BaseSegmentationModel):
                     logger=True,
                 )
             # TODO - total f1_score using a merger of TP/FP ...
-
-        ####################################################################################
-        ####################################################################################

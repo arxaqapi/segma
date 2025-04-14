@@ -1,5 +1,3 @@
-from dataclasses import dataclass
-
 import torch
 import torch.nn as nn
 from torchmetrics.functional.classification import binary_f1_score
@@ -11,10 +9,9 @@ from segma.utils.encoders import LabelEncoder, MultiLabelEncoder
 
 from .utils import load_wavlm
 
-#NOTE - Heavily copied from whisper/hydra.py
+
+# NOTE - Heavily copied from whisper/hydra.py
 class SurgicalHydraWavLM(BaseSegmentationModel):
-
-
     def __init__(
         self,
         label_encoder: LabelEncoder,
@@ -25,19 +22,16 @@ class SurgicalHydraWavLM(BaseSegmentationModel):
         super().__init__(label_encoder, config, weight_loss)
         if not isinstance(label_encoder, MultiLabelEncoder):
             raise ValueError("Only MultiLabelEncoder is accepted for HydraWavLM.")
-        
+
         self.feature_extractor, self.encoder = load_wavlm(
             self.config.model.config.wav_encoder
         )
-        
 
         if (
             config.model.config.encoder_layers is None
             or len(config.model.config.encoder_layers) == 0
         ):
-            self.enc_layers_to_use = list(
-                range(self.encoder.config.num_hidden_layers)
-            )
+            self.enc_layers_to_use = list(range(self.encoder.config.num_hidden_layers))
         else:
             self.enc_layers_to_use = sorted(
                 [i - 1 for i in config.model.config.encoder_layers]
@@ -77,11 +71,13 @@ class SurgicalHydraWavLM(BaseSegmentationModel):
         )
 
         self.conv_settings = ConvolutionSettings(
-            kernels=(10, 3,3,3,3, 2,2), strides=(5, 2,2,2,2, 2,2), paddings=(0, 0,0,0,0, 0,0)
+            kernels=(10, 3, 3, 3, 3, 2, 2),
+            strides=(5, 2, 2, 2, 2, 2, 2),
+            paddings=(0, 0, 0, 0, 0, 0, 0),
         )
 
-
         # NOTE - copied from whisper/hydra.py
+
     def forward(self, x: torch.Tensor):
         enc_x: BaseModelOutput = self.encoder(x, output_hidden_states=True)
         hidden_states = enc_x.hidden_states[1:]
@@ -109,7 +105,7 @@ class SurgicalHydraWavLM(BaseSegmentationModel):
             # NOTE - sigmoid is added in BCEWithLogitsLoss, return only logits
             # name: nn.functional.sigmoid(head(lstm_out))
             for name, head in self.task_heads.items()
-        } 
+        }
 
     def training_step(self, batch, batch_idx):
         x = batch["x"]
@@ -215,6 +211,3 @@ class SurgicalHydraWavLM(BaseSegmentationModel):
                     logger=True,
                 )
             # TODO - total f1_score using a merger of TP/FP ...
-
-        ####################################################################################
-        ####################################################################################

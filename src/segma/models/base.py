@@ -5,13 +5,13 @@ from math import floor
 import lightning as pl
 import matplotlib.pyplot as plt
 import torch
-import wandb
 from torchmetrics.functional.classification import (
     multiclass_auroc,
     multiclass_f1_score,
     multiclass_roc,
 )
 
+import wandb
 from segma.config.base import Config
 from segma.utils.encoders import LabelEncoder
 from segma.utils.receptive_fields import rf_center_i, rf_size

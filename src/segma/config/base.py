@@ -139,11 +139,13 @@ class SurgicalHydraConfig(BaseConfig):
     lstm: LSTMConfig
     classifier: int
 
+
 @dataclass
 class HydraWavLMConfig(BaseConfig):
     wav_encoder: str
     lstm: LSTMConfig
     classifier: int
+
 
 @dataclass
 class SurgicalHydraWavLMConfig(BaseConfig):
@@ -152,6 +154,7 @@ class SurgicalHydraWavLMConfig(BaseConfig):
     reduction: Literal["average", "weighted"]
     lstm: LSTMConfig
     classifier: int
+
 
 @dataclass
 class ModelConfig(BaseConfig):

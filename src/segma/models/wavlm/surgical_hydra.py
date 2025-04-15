@@ -1,3 +1,5 @@
+from typing import Any, Mapping
+
 import torch
 import torch.nn as nn
 from torchmetrics.functional.classification import binary_f1_score
@@ -211,3 +213,18 @@ class SurgicalHydraWavLM(BaseSegmentationModel):
                     logger=True,
                 )
             # TODO - total f1_score using a merger of TP/FP ...
+
+    def state_dict(self, *args, **kwargs):
+        """Custom state_dict that excludes the whisper encoder."""
+        state_dict = super().state_dict(*args, **kwargs)
+        # Remove all entries starting with 'w_encoder.'
+        keys_to_remove = [k for k in state_dict.keys() if k.startswith("encoder.")]
+        for k in keys_to_remove:
+            del state_dict[k]
+        return state_dict
+
+    def load_state_dict(
+        self, state_dict: Mapping[str, Any], strict: bool = True, assign: bool = False
+    ):
+        """Custom load_state_dict that doesn't require whisper encoder weights."""
+        return super().load_state_dict(state_dict, strict=False, assign=assign)

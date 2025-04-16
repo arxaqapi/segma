@@ -5,7 +5,7 @@ import pytest
 from scipy.io import wavfile
 
 from scripts.generate_data import gen_classification
-from segma.file_dataset import SegmaFileDataset, URISubsetLeakageError
+from segma.data import SegmaFileDataset, URISubsetLeakageError
 
 
 @pytest.fixture

@@ -3,7 +3,7 @@
 from collections import defaultdict
 from functools import reduce
 from itertools import combinations
-from math import ceil, floor
+from math import ceil
 from pathlib import Path
 from typing import Callable, Generator
 
@@ -63,7 +63,8 @@ def load_annotations(aa_file_p: Path) -> list[AudioAnnotation]:
 
 
 def filter_annotations(
-    annotations: list[AudioAnnotation], covered_labels: tuple[str, ...]
+    annotations: list[AudioAnnotation],
+    covered_labels: tuple[str, ...] | list[str] | set[str],
 ) -> list[AudioAnnotation]:
     """Filters a list of audio annotation by removing labels that are not in `covered_labels`.
 
@@ -118,6 +119,7 @@ class SegmentationDataLoader(pl.LightningDataModule):
 
         # NOTE - load train, val, test uris
         # dict from subset to list of uris
+        # SECTION - remove until
         self.uris: dict[str, list[str]] = {
             subset: load_uris(
                 (Path(config.data.dataset_path) / subset).with_suffix(".txt")
@@ -136,7 +138,7 @@ class SegmentationDataLoader(pl.LightningDataModule):
         # NOTE - for each subset, get and store audio duration, annotated duration (as number of frames) and annotations
         # NOTE - the audio_duration_f and annotated_duration_f are stored as a tuple in the list `self.subds_to_durations`
         _durations_t = np.dtype(
-            [("audio_duration_f", np.int32), ("annotated_duration_f", np.int32)]
+            [("audio_duration_f", np.uint32), ("annotated_duration_f", np.uint32)]
         )
         self.subds_to_durations: dict[str, np.ndarray] = {}
         """mapping from subset to arrays of tuples containing the audio duration and total annotated duration, as number of frames"""
@@ -221,6 +223,7 @@ class SegmentationDataLoader(pl.LightningDataModule):
                         ]
                     )
                 )
+        # !SECTION - remove until here
 
     def _validate_uri(
         self, num_frames, sample_rate, annotations: list[AudioAnnotation]
@@ -239,7 +242,7 @@ class SegmentationDataLoader(pl.LightningDataModule):
 
         if sample_rate != self.config.audio.sample_rate:
             return False
-
+        # FIXME - contradictory to filter
         for annot in annotations:
             if annot.label not in self.label_encoder:
                 return False
@@ -320,6 +323,10 @@ class AudioSegmentationDataset(IterableDataset):
 
         assert len(uris) == durations.shape[0], "Mismatch between URIs and durations."
 
+    # FIXME - segma should be:
+    # FIXME - a receptive_field based audio-segmentation toolkit
+    # FIXME - with a modern and lightweight codebase that is well documented
+    # FIXME - modular and easily extensible (for different SSL and custom models)
     def __iter__(self) -> Generator[dict[str, np.ndarray | torch.Tensor], None, None]:
         """Randomly samples an 'self.config.audio.chunk_duration_s' second audio sample with its corresponding labels.
         The labels correspond to overlapping frames with 'displacement' settings obtained from the models `ConvolutionSettings`.
@@ -334,7 +341,7 @@ class AudioSegmentationDataset(IterableDataset):
         # Ensures that each worker has a separate seed
         rng = np.random.default_rng(seed=w_info.seed if w_info else None)
 
-        durations_f = floor(seconds_to_frames(self.config.audio.chunk_duration_s))
+        durations_f = seconds_to_frames(self.config.audio.chunk_duration_s)
         while True:
             # NOTE - 1. Sample a file depending on its annotated or audio duration
             # audio_duration_f, annotated_duration_f
@@ -439,6 +446,13 @@ class AudioSegmentationDataset(IterableDataset):
                 self.config.train.batch_size,
             )
         )
+
+
+"""
+    Given a models receptive field settings and a `chunk_duration_s`,
+    compute the amount of possible frames to generate and generate these frames.
+    (to be offsetted)
+"""
 
 
 def generate_frames(

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from segma.dataloader import filter_annotations, load_annotations
+from segma.data.loaders import filter_annotations, load_annotations
 
 
 def test_load_annotations():

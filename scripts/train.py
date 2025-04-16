@@ -18,7 +18,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from segma.config import Config, load_config
-from segma.dataloader import SegmentationDataLoader
+from segma.data import SegmentationDataLoader
 from segma.models import (
     HydraWhisper,
     Models,

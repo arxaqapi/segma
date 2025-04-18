@@ -18,7 +18,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from segma.config import Config, load_config
-from segma.dataloader import SegmentationDataLoader
+from segma.data import SegmaFileDataset, SegmentationDataLoader
 from segma.models import (
     HydraWhisper,
     Models,
@@ -122,8 +122,12 @@ if __name__ == "__main__":
         f"[log @ {datetime.now().strftime('%Y%m%d_%H:%M:%S')}] - SegmentationDataLoader initializing ...",
         flush=True,
     )
+    sfd = SegmaFileDataset.from_config(config)
+    sfd.load()
+
     dm = SegmentationDataLoader(
-        l_encoder,
+        dataset=sfd,
+        label_encoder=l_encoder,
         config=config,
         conv_settings=model.conv_settings,
         audio_preparation_hook=model.audio_preparation_hook,

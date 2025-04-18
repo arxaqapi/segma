@@ -10,7 +10,7 @@ from pyannote.core import Annotation, Segment
 
 from segma.annotation import AudioAnnotation
 from segma.config.base import Config, load_config
-from segma.dataloader import load_uris
+from segma.data.utils import load_uris
 from segma.predict import load_all_logits, predict_all_logits
 from segma.utils.encoders import (
     LabelEncoder,

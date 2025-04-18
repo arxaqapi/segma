@@ -163,7 +163,7 @@ if __name__ == "__main__":
         "-n",
         "--n_samples",
         required=True,
-        help="Number of examples per split",
+        help="Number of examples per split.",
         type=int,
     )
     parser.add_argument(
@@ -171,9 +171,11 @@ if __name__ == "__main__":
         help="Boolean flag to determine if spectograms need to be generated.",
         action="store_true",
     )
+    parser.add_argument("--out", default="data")
     args = parser.parse_args()
+    args.out = Path(args.out)
 
-    db_path = Path(f"data/debug_{args.n_samples}")
+    db_path = args.out / f"debug_{args.n_samples}"
     if not db_path.exists():
         print(
             f"[log] - Generating a dummy dataset of size {args.n_samples * 3} ({args.n_samples} * 3)."

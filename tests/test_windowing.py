@@ -1,7 +1,7 @@
 import numpy as np
 from interlap import InterLap
 
-from segma.dataloader import windows_to_targets
+from segma.data.loaders import windows_to_targets
 from segma.utils.encoders import PowersetMultiLabelEncoder
 
 

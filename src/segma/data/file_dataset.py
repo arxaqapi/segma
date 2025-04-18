@@ -1,4 +1,5 @@
-from functools import reduce
+from collections import defaultdict
+from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
 from typing import Literal
@@ -7,102 +8,39 @@ import numpy as np
 import torchaudio
 from interlap import InterLap
 
-from segma.annotation import AudioAnnotation
-from segma.utils.conversions import frames_to_seconds, seconds_to_frames
+from segma.data.utils import (
+    create_interlap_from_annotation,
+    filter_annotations,
+    load_annotations,
+    load_uris,
+    total_annotation_duration_f,
+)
+from segma.utils.conversions import frames_to_seconds
+
+
+class DatasetNotLoadedError(Exception): ...
 
 
 class URISubsetLeakageError(Exception):
     """Error raised when there is data leakage between the different defined subsets."""
 
 
-def load_uris(file_p: Path) -> list[str]:
-    """Loads a list of URIs from a given text file.
-
-    Args:
-        file_p (Path): Path to the file containing one URI per line.
-
-    Returns:
-        list[str]: A list of URIs as strings.
-
-    Example:
-        Contents of the file pointed to by `file_p`:
-            ```
-            # file_p content
-            uri_001
-            uri_002
-            uri_003
-            ```
-    """
-    with file_p.open("r") as f:
-        uris = [line.strip() for line in f.readlines()]
-    return uris
+class CacheTooOldError(Exception):
+    """Error raised when the cache is too old and the dataset needs to be entirely reloaded."""
 
 
-def load_annotations(aa_file_p: Path) -> list[AudioAnnotation]:
-    """Loads audio annotations from a file.
-
-    Args:
-        aa_file_p (Path): Path to the file containing audio annotations.
-
-    Returns:
-        list[AudioAnnotation]: A list of parsed `AudioAnnotation` objects.
-    """
-    with aa_file_p.open("r") as f:
-        annotations = [AudioAnnotation.read_line(line) for line in f.readlines()]
-    return annotations
-
-
-def total_annotation_duration_f(
-    annotations: list[AudioAnnotation], sample_rate: int
-) -> int:
-    """Computed the total annotated duration in number of frames of a list of `AudioAnnotation` objects.
-
-    Args:
-        annotations (list[AudioAnnotation]): List of `AudioAnnotation` objects.
-        sample_rate (int): Sample rate of the audio, used to convert to the right amount of frames
-
-    Returns:
-        float: Total duration in ms of all annotated segments.
-    """
-    return seconds_to_frames(
-        reduce(lambda b, e: b + e.duration_s, annotations, 0.0), sample_rate=sample_rate
-    )
-
-
-def filter_annotations(
-    annotations: list[AudioAnnotation],
-    covered_labels: tuple[str, ...] | list[str] | set[str],
-) -> list[AudioAnnotation]:
-    """Filters a list of audio annotation by removing labels that are not in `covered_labels`.
-
-    Args:
-        annotations (list[AudioAnnotation]): A list of `AudioAnnotation` objects.
-        covered_labels (tuple[str, ...]): tuple of labels to keep.
-
-    Returns:
-        list[AudioAnnotation]: A filtered list of `AudioAnnotation` objects.
-    """
-    return [annot for annot in annotations if annot.label in covered_labels]
-
-
-def create_interlap_from_annotation(annotations: list[AudioAnnotation]):
-    """Given a list of `AudioAnnotation`, create an `Interlap` object using the frame information
-
-    Args:
-        annotations (list[AudioAnnotation]): _description_
-
-    Returns:
-        _type_: _description_
-    """
-    # self.label_encoder(annot.label),
-    return InterLap(
-        [(annot.start_time_f, annot.end_time_f, annot.label) for annot in annotations]
-    )
+@dataclass
+class DatasetSubset:
+    uris: set
+    durations: np.ndarray
+    interlaps: list[InterLap]
 
 
 # REVIEW - If we want to oversample, store annotated duration per label for each file (optional)
 class SegmaFileDataset:
-    """
+    """Loads a dataset in a multistep way, handling exclusion,
+    file validation and caching of computed metrics.
+
     Format of the dataset:
     ```
     dataset_name/
@@ -120,7 +58,8 @@ class SegmaFileDataset:
     └── exclude.txt (optional)
     ```
 
-    `train.txt`, `val.txt`, `test.txt` and `exclude.txt` contain a list of uris separated with newlines.
+    `train.txt`, `val.txt`, `test.txt` and `exclude.txt` contain a list of uris
+    separated with newlines.
     """
 
     SUBSET_NAMES = ("train", "val", "test")
@@ -133,18 +72,40 @@ class SegmaFileDataset:
         sample_rate: int = 16_000,
     ) -> None:
         self.base_p = Path(base_p)
+        if not self.base_p.exists():
+            raise FileNotFoundError(
+                f"Given path to the dataset is non existent. Got `{self.base_p}`."
+            )
         self.classes = classes
         self.chunk_duration_s = chunk_duration_s
         self.sample_rate = sample_rate
 
-        self.removed_uris: dict[Literal["exclude.txt", "invalid"], set[str]] = {}
+        self.removed_uris: dict[
+            Literal[
+                "exclude.txt",
+                "invalid",
+                "duplicate.train",
+                "duplicate.val",
+                "duplicate.test",
+            ],
+            set[str],
+        ] = {}
         self.subset_to_uris = self.load_all_uris()
 
         # Call `.load()` to populate the next 2 variables
         self.subds_to_durations: None | dict[str, np.ndarray] = None
         self.subds_to_interlaps: None | dict[str, list[InterLap]] = None
 
-    def check_for_data_leakage(self, subset_to_uris: dict[str, set[str]]):
+    def check_for_data_leakage(self, subset_to_uris: dict[str, set[str]]) -> None:
+        """Check that the uris sets do not intersect.
+        Parirwise set intersection is checked such that they are empty.
+
+        Args:
+            subset_to_uris (dict[str, set[str]]): Dict that maps the subset name to the uris.
+
+        Raises:
+            URISubsetLeakageError: Raises when there is data leakage between two dataset subset.
+        """
         for k1, k2 in combinations(self.SUBSET_NAMES, 2):
             overlap = subset_to_uris[k1] & subset_to_uris[k2]
             if overlap:
@@ -152,15 +113,25 @@ class SegmaFileDataset:
                     f"Subset {k1} and {k2} are overlaping, which can be data leakage.\nOverlapping uris are: '{overlap=}'"
                 )
 
-    def load_all_uris(self):
-        """For each subset defined in `SUBSET_NAMES`, load all uris and filter out uris in `exclude.txt`"""
-        subset_to_uris: dict[str, set[str]] = {}
+    def load_all_uris(self) -> dict[str, set[str]]:
+        """For each subset defined in `SUBSET_NAMES`, load all uris
+        and filter out uris present in `exclude.txt`.
+
+        Returns:
+            dict[str, set[str]]: _description_
+        """
+        subset_to_uris: dict[str, set[str]] = defaultdict(set)
         for subset in self.SUBSET_NAMES:
             uri_list_p = (self.base_p / subset).with_suffix(".txt")
-            # TODO - check for uri deduplication in list of uris
-            subset_to_uris[subset] = set(
-                load_uris(uri_list_p) if uri_list_p.exists() else []
-            )
+            # NOTE - checks for uri deduplication in list of uris
+            uri_list = load_uris(uri_list_p) if uri_list_p.exists() else []
+            subset_to_uris[subset] = set(uri_list)
+            subset_duplicate = {
+                uri for uri in uri_list if uri in subset_to_uris[subset]
+            }
+            if subset_duplicate:
+                self.removed_uris[f"duplicate.{subset}"] = subset_duplicate
+
         # NOTE - handle exclusion file
         exclude_p = self.base_p / "exclude.txt"
         if exclude_p.exists():
@@ -173,14 +144,7 @@ class SegmaFileDataset:
         self.check_for_data_leakage(subset_to_uris)
         return subset_to_uris
 
-    def load(self) -> None:
-        """Loads all annotation informations about the dataset,
-        retrieves and store the total length of the corresponding audios and annotated duration,
-        and createst `Interlap`objects per uri.
-
-        Raises:
-            ValueError: Raises if the datasets are empty after processing
-        """
+    def _load(self) -> None:
         # ~70h max per audio
         _durations_t = np.dtype(
             [("audio_duration_f", np.uint32), ("annotated_duration_f", np.uint32)]
@@ -231,28 +195,145 @@ class SegmaFileDataset:
         self.subds_to_durations = subds_to_durations
         self.subds_to_interlaps = subds_to_interlaps
 
-        # TODO - implement caching
-        # try:
-        #     self.load_cache()
-        # except: pass
+    def load(self, use_cache: bool = True) -> None:
+        """Loads all annotation informations about the dataset,
+        retrieves and store the total length of the corresponding audios and annotated duration,
+        and createst `Interlap`objects per uri.
+
+        This function first checks if the cache is available and tries to load it,
+        if it fails it will build the dataset.
+
+        Args:
+            use_cache (bool, optional): Is set to false, will reload the dataset,
+                else will look into and existing. Defaults to True.
+        """
+        try:
+            if use_cache:
+                self.load_cache()
+                return
+        except FileNotFoundError:
+            self._load()
+        except CacheTooOldError:
+            self._load()
+        else:
+            self._load()
+        self.save_cache()
 
     def _validate_uri(self, num_frames: int, sample_rate: int) -> bool:
-        """valide the audio file, if it is not valid:
-        - size needs to be larger than chunk_duration_s
+        """Validate the audio file, checks that the size is bigger than `chunk_duration_s`
+        and that the ample rate matches the one defined in `self.sample_rate`.
         - sample_rate need to match
+
+        Args:
+            num_frames (int): number of frames in the loaded audio.
+            sample_rate (int): sample rate of the loaded audio.
+
+        Returns:
+            bool: Returns True if the audio verifies all conditions, else False.
         """
         return (
             frames_to_seconds(num_frames, sample_rate) >= self.chunk_duration_s
             and sample_rate == self.sample_rate
         )
 
-    def load_cache(self):
-        """Load the cached dataset informations."""
-        raise NotImplementedError
+    def load_cache(self, max_days: float = 2.0) -> None:
+        """Loads the cached durations informations and interlap objects if the cache is available.
 
-    def save_cache(self):
-        """Save the computed dataset informations to disk."""
-        raise NotImplementedError
+        The cache is invalidated after a certain time defined by `max_days`.
+
+        Args:
+            max_days (float, optional): Maximum number of days before the cache is invalidated. Defaults to 2..
+
+        Raises:
+            FileNotFoundError: Raisd if the cache objects are not found.
+            CacheTooOldError: Raised if the cache is too old and needs to be invalidated.
+        """
+        import pickle
+        import time
+
+        # REVIEW based on base_p
+        cache_path: Path = Path(".cache/segma") / self.base_p
+        cache_path.mkdir(parents=True, exist_ok=True)
+
+        subds_to_durations_p = cache_path / "subds_to_durations"
+        subds_to_interlaps_p = cache_path / "subds_to_interlaps"
+
+        if not subds_to_durations_p.exists() or not subds_to_interlaps_p.exists():
+            raise FileNotFoundError
+
+        # NOTE - check if outdated (> 7 days)
+        current = time.time()
+
+        def days_diff(time: float) -> float:
+            return (current - time) / 3600 / 24
+
+        # NOTE - if the has been create more than max_days days ago, trigger reloading and recaching
+        if (
+            days_diff(subds_to_durations_p.stat().st_birthtime) > max_days
+            or days_diff(subds_to_interlaps_p.stat().st_birthtime) > max_days
+        ):
+            raise CacheTooOldError(f"Cache is older than {max_days} days.")
+
+        # NOTE - unpickle `subds_to_durations`` and `subds_to_interlaps``
+        with subds_to_durations_p.open("rb") as bf:
+            self.subds_to_durations = pickle.load(bf)
+        with subds_to_interlaps_p.open("rb") as bf:
+            self.subds_to_interlaps = pickle.load(bf)
+
+    def save_cache(self) -> None:
+        """Save the computed dataset informations to disk.
+
+        The cache file lies in .cache/segma/self.base_p
+        """
+        import pickle
+
+        # REVIEW based on base_p
+        cache_path: Path = Path(".cache/segma") / self.base_p
+        cache_path.mkdir(parents=True, exist_ok=True)
+
+        with (cache_path / "subds_to_durations").open("wb") as bf:
+            pickle.dump(self.subds_to_durations, bf)
+        with (cache_path / "subds_to_interlaps").open("wb") as bf:
+            pickle.dump(self.subds_to_interlaps, bf)
+
+    def is_loaded(self, raises: bool = False) -> bool:
+        """Verifies that the dataset has been loaded.
+
+        Args:
+            raises (bool, optional): Behaviour can be set to raise instead of returning a boolean value. Defaults to False.
+
+        Raises:
+            DatasetNotLoadedError: Raised if `raises` set to True and the dataset has not been loaded.
+
+        Returns:
+            bool: Return True if the dataset has been loaded, else return False.
+        """
+        if raises:
+            raise DatasetNotLoadedError
+        return (
+            self.subds_to_durations is not None and self.subds_to_interlaps is not None
+        )
+
+    @classmethod
+    def clean_cache(cls, base_p: str | Path) -> None:
+        """Invalidates the cache by removing all files and the cache folder.
+
+        This will fail silently if the folder is empty or does not exist.
+
+        Args:
+            base_p (str | Path): Base path of the dataset used to find the cache.
+        """
+        cache_path = Path(".cache/segma") / base_p
+
+        subds_to_durations_p = cache_path / "subds_to_durations"
+        subds_to_interlaps_p = cache_path / "subds_to_interlaps"
+
+        subds_to_durations_p.unlink(missing_ok=True)
+        subds_to_interlaps_p.unlink(missing_ok=True)
+        try:
+            cache_path.rmdir()
+        except:
+            pass
 
     @property
     def aa_p(self) -> Path:
@@ -269,3 +350,30 @@ class SegmaFileDataset:
     @property
     def wav_p(self) -> Path:
         return self.base_p / "wav"
+
+    @property
+    def train(self) -> DatasetSubset:
+        self.is_loaded(raises=True)
+        return DatasetSubset(
+            uris=self.subset_to_uris["train"],
+            durations=self.subds_to_durations["train"],
+            interlaps=self.subds_to_interlaps["train"],
+        )
+
+    @property
+    def val(self) -> DatasetSubset:
+        self.is_loaded(raises=True)
+        return DatasetSubset(
+            uris=self.subset_to_uris["val"],
+            durations=self.subds_to_durations["val"],
+            interlaps=self.subds_to_interlaps["val"],
+        )
+
+    @property
+    def test(self) -> DatasetSubset:
+        self.is_loaded(raises=True)
+        return DatasetSubset(
+            uris=self.subset_to_uris["test"],
+            durations=self.subds_to_durations["test"],
+            interlaps=self.subds_to_interlaps["test"],
+        )

@@ -10,13 +10,16 @@ from segma.data import SegmaFileDataset, URISubsetLeakageError
 
 @pytest.fixture
 def _prepare_dummy_ds():
-    gen_classification(Path("tests/sample/debug_10"), per_split=10)
     gen_classification(Path("tests/sample/debug_5"), per_split=5)
+    gen_classification(Path("tests/sample/debug_10"), per_split=10)
     yield
     import shutil
 
-    shutil.rmtree("tests/sample/debug_10", ignore_errors=True)
     shutil.rmtree("tests/sample/debug_5", ignore_errors=True)
+    shutil.rmtree("tests/sample/debug_10", ignore_errors=True)
+
+    SegmaFileDataset.clean_cache("tests/sample/debug_5")
+    SegmaFileDataset.clean_cache("tests/sample/debug_10")
 
 
 def test_SegmaFileDataset_init(_prepare_dummy_ds):
@@ -108,8 +111,9 @@ def test_SegmaFileDataset_init_w_exclude_invalid(_prepare_dummy_ds):
         chunk_duration_s=120,
     )
 
-    sfd.load()
+    sfd.load(False)
 
+    assert len(sfd.removed_uris["invalid"]) == 30
     assert len(sfd.removed_uris["invalid"]) == 30
 
     for uris in sfd.subset_to_uris.values():
@@ -123,3 +127,45 @@ def test_SegmaFileDataset_init_w_exclude_invalid(_prepare_dummy_ds):
         == len(sfd.subset_to_uris["train"])
         == 1
     )
+
+
+def test_non_existant_ds():
+    ds_path = Path("tests/sample/missing_dataset")
+    with pytest.raises(
+        FileNotFoundError, match=f"Given path to the dataset is non existent. Got `{ds_path}`."
+    ):
+        SegmaFileDataset(
+            ds_path,
+            classes=[],
+            chunk_duration_s=1,
+        )
+
+
+def test_SegmaFileDataset_save_cache(_prepare_dummy_ds):
+    sfd = SegmaFileDataset(
+        "tests/sample/debug_10",
+        classes=["male", "female", "key_child", "other_child"],
+        chunk_duration_s=1.0,
+    )
+
+    sfd.load()
+    
+    assert (Path(".cache/segma") / sfd.base_p / "subds_to_durations").exists()
+    assert (Path(".cache/segma") / sfd.base_p / "subds_to_interlaps").exists()
+
+
+def test_SegmaFileDataset_load_cache(_prepare_dummy_ds):
+    SegmaFileDataset(
+        "tests/sample/debug_10",
+        classes=["male", "female", "key_child", "other_child"],
+        chunk_duration_s=1.0,
+    ).load()
+
+    sfd = SegmaFileDataset(
+        "tests/sample/debug_10",
+        classes=["male", "female", "key_child", "other_child"],
+        chunk_duration_s=1.0,
+    )
+    sfd.load_cache()
+    assert sfd.subds_to_durations is not None
+    assert sfd.subds_to_interlaps is not None

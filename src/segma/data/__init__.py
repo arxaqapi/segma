@@ -1,4 +1,9 @@
-from .file_dataset import SegmaFileDataset, URISubsetLeakageError
+from .file_dataset import DatasetSubset, SegmaFileDataset, URISubsetLeakageError
 from .loaders import SegmentationDataLoader
 
-__all__ = ["SegmentationDataLoader", "SegmaFileDataset", "URISubsetLeakageError"]
+__all__ = [
+    "DatasetSubset",
+    "SegmaFileDataset",
+    "SegmentationDataLoader",
+    "URISubsetLeakageError",
+]

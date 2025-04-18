@@ -1,8 +1,3 @@
-"""Data loading utilies"""
-
-from collections import defaultdict
-from functools import reduce
-from itertools import combinations
 from math import ceil
 from pathlib import Path
 from typing import Callable, Generator
@@ -14,80 +9,14 @@ import torchaudio
 from interlap import InterLap
 from torch.utils.data import DataLoader, IterableDataset
 
-from segma.annotation import AudioAnnotation
 from segma.config import Config
+from segma.data.file_dataset import DatasetSubset, SegmaFileDataset
 from segma.models.base import ConvolutionSettings
 from segma.utils.conversions import (
     frames_to_seconds,
-    milliseconds_to_frames,
     seconds_to_frames,
 )
 from segma.utils.encoders import LabelEncoder
-
-
-def load_uris(file_p: Path) -> list[str]:
-    """Loads a list of URIs from a given text file.
-
-    Args:
-        file_p (Path): Path to the file containing one URI per line.
-
-    Returns:
-        list[str]: A list of URIs as strings.
-
-    Example:
-        Contents of the file pointed to by `file_p`:
-            ```
-            # file_p content
-            uri_001
-            uri_002
-            uri_003
-            ```
-    """
-    with file_p.open("r") as f:
-        uris = [line.strip() for line in f.readlines()]
-    return uris
-
-
-def load_annotations(aa_file_p: Path) -> list[AudioAnnotation]:
-    """Loads audio annotations from a file.
-
-    Args:
-        aa_file_p (Path): Path to the file containing audio annotations.
-
-    Returns:
-        list[AudioAnnotation]: A list of parsed `AudioAnnotation` objects.
-    """
-    with aa_file_p.open("r") as f:
-        annotations = [AudioAnnotation.read_line(line) for line in f.readlines()]
-    return annotations
-
-
-def filter_annotations(
-    annotations: list[AudioAnnotation],
-    covered_labels: tuple[str, ...] | list[str] | set[str],
-) -> list[AudioAnnotation]:
-    """Filters a list of audio annotation by removing labels that are not in `covered_labels`.
-
-    Args:
-        annotations (list[AudioAnnotation]): A list of `AudioAnnotation` objects.
-        covered_labels (tuple[str, ...]): tuple of labels to keep.
-
-    Returns:
-        list[AudioAnnotation]: A filtered list of `AudioAnnotation` objects.
-    """
-    return [annot for annot in annotations if annot.label in covered_labels]
-
-
-def total_annotation_duration_ms(annotations: list[AudioAnnotation]) -> float:
-    """Computed the total annotated duration in ms of a list of `AudioAnnotation` objects.
-
-    Args:
-        annotations (list[AudioAnnotation]): List of `AudioAnnotation` objects.
-
-    Returns:
-        float: Total duration in ms of all annotated segments.
-    """
-    return reduce(lambda b, e: b + e.duration_ms, annotations, 0)
 
 
 class DataLoaderError(Exception): ...
@@ -104,12 +33,14 @@ class SegmentationDataLoader(pl.LightningDataModule):
 
     def __init__(
         self,
+        dataset: SegmaFileDataset,
         label_encoder: LabelEncoder,
         config: Config,
         conv_settings: ConvolutionSettings,
         audio_preparation_hook: Callable | None = None,
     ) -> None:
         super().__init__()
+        self.dataset = dataset
         self.label_encoder = label_encoder
         self.config = config
         self.conv_settings = conv_settings
@@ -117,143 +48,14 @@ class SegmentationDataLoader(pl.LightningDataModule):
 
         self.rng = np.random.default_rng()
 
-        # NOTE - load train, val, test uris
-        # dict from subset to list of uris
-        # SECTION - remove until
-        self.uris: dict[str, list[str]] = {
-            subset: load_uris(
-                (Path(config.data.dataset_path) / subset).with_suffix(".txt")
-            )
-            for subset in ("train", "val", "test")
-        }
+        # NOTE - load dataset
+        if not dataset.is_loaded():
+            dataset.load()
 
-        # NOTE - check for data-leakage
-        for k1, k2 in combinations(("train", "val", "test"), 2):
-            overlap = set(self.uris[k1]) & set(self.uris[k2])
-            if overlap:
-                raise DataLoaderError(
-                    f"Subset {k1} and {k2} are overlaping, which can be data leakage.\nOverlapping uris are: '{overlap=}'"
-                )
-
-        # NOTE - for each subset, get and store audio duration, annotated duration (as number of frames) and annotations
-        # NOTE - the audio_duration_f and annotated_duration_f are stored as a tuple in the list `self.subds_to_durations`
-        _durations_t = np.dtype(
-            [("audio_duration_f", np.uint32), ("annotated_duration_f", np.uint32)]
-        )
-        self.subds_to_durations: dict[str, np.ndarray] = {}
-        """mapping from subset to arrays of tuples containing the audio duration and total annotated duration, as number of frames"""
-        _subds_to_annotations: dict[str, list[list[AudioAnnotation]]] = defaultdict(
-            list
-        )
-        uris_to_remove: list[tuple[str, str]] = []
-        for subset in ("train", "val", "test"):
-            duration_l = []
-            for uri in self.uris[subset]:
-                # total audio duration in number of frames sampled at self.sample_rate
-                uri_path = (
-                    (Path(config.data.dataset_path) / "wav" / uri)
-                    .with_suffix(".wav")
-                    .resolve()
-                )
-                info = torchaudio.info(uri=uri_path)
-                annotations = load_annotations(
-                    (Path(config.data.dataset_path) / "aa" / uri).with_suffix(".aa")
-                )
-
-                if not self._validate_uri(
-                    num_frames=info.num_frames,
-                    sample_rate=info.sample_rate,
-                    annotations=annotations,
-                ):
-                    uris_to_remove.append((subset, uri))
-                    continue
-
-                # REVIEW - annotation are stored here and reused later, such that filtering has to happen only once.
-                annotations = filter_annotations(
-                    annotations, covered_labels=config.data.classes
-                )
-                _subds_to_annotations[subset].append(annotations)
-
-                duration_l.append(
-                    (info.num_frames, total_annotation_duration_ms(annotations))
-                )
-
-            # NOTE - make efficient np.array
-            self.subds_to_durations[subset] = np.array(duration_l, dtype=_durations_t)
-
-        # NOTE - remove all uris where the audio is shorter that the given duration
-        for subset, uri_to_remove in uris_to_remove:
-            self.uris[subset].remove(uri_to_remove)
-
-        # NOTE - check that the adjustet subset size is > 0
-        for subset, uris in self.uris.items():
-            if len(uris) == 0:
-                raise ValueError(
-                    f"subset '{subset}' is empty after removing all audio instances with duration < {self.config.audio.chunk_duration_s} s and all audios/segments with invalid labels."
-                )
-
-        # NOTE - load all annotations as mapping from subset to list of Interlap object (that allows fast query for `y` vector construction)
-        self.subds_to_annotations: dict[str, list[InterLap]] = defaultdict(list)
-        for subset in ("train", "val", "test"):
-            for uri, annotations in zip(
-                self.uris[subset], _subds_to_annotations[subset]
-            ):
-                # for each uri, all annotations are retrieved and transformed into an interlap object
-                self.subds_to_annotations[subset].append(
-                    # REVIEW - Interlap add does work with int only
-                    InterLap(
-                        [
-                            (
-                                int(
-                                    milliseconds_to_frames(
-                                        annot.start_time_ms,
-                                        sample_rate=config.audio.sample_rate,
-                                    )
-                                ),
-                                int(
-                                    milliseconds_to_frames(
-                                        annot.end_time_ms,
-                                        sample_rate=config.audio.sample_rate,
-                                    )
-                                ),
-                                # self.label_encoder(annot.label),
-                                annot.label,
-                            )
-                            for annot in annotations
-                        ]
-                    )
-                )
-        # !SECTION - remove until here
-
-    def _validate_uri(
-        self, num_frames, sample_rate, annotations: list[AudioAnnotation]
-    ) -> bool:
-        """valide the audio file, if it is not valid
-        (sample_rate does not match, label do not match, shorter than chunk_duration_s),
-        return False
-        """
-        # TODO - handle the case when audio_duration == chunk_duration_s -> pick index 0
-        # TODO - raise warnings
-        if (
-            frames_to_seconds(num_frames, sample_rate)
-            <= self.config.audio.chunk_duration_s
-        ):
-            return False
-
-        if sample_rate != self.config.audio.sample_rate:
-            return False
-        # FIXME - contradictory to filter
-        for annot in annotations:
-            if annot.label not in self.label_encoder:
-                return False
-        return True
-
-    def train_dataloader(self):
+    def train_dataloader(self) -> DataLoader:
         return DataLoader(
             dataset=AudioSegmentationDataset(
-                uris=self.uris["train"],
-                durations=self.subds_to_durations["train"],
-                annotations=self.subds_to_annotations["train"],
+                subset=self.dataset.train,
                 config=self.config,
                 conv_settings=self.conv_settings,
                 label_encoder=self.label_encoder,
@@ -268,12 +70,10 @@ class SegmentationDataLoader(pl.LightningDataModule):
             else None,
         )
 
-    def val_dataloader(self):
+    def val_dataloader(self) -> DataLoader:
         return DataLoader(
             dataset=AudioSegmentationDataset(
-                uris=self.uris["val"],
-                durations=self.subds_to_durations["val"],
-                annotations=self.subds_to_annotations["val"],
+                subset=self.dataset.val,
                 config=self.config,
                 conv_settings=self.conv_settings,
                 label_encoder=self.label_encoder,
@@ -296,17 +96,15 @@ class AudioSegmentationDataset(IterableDataset):
 
     def __init__(
         self,
-        uris: list[str],
-        durations: np.ndarray,
-        annotations: list[InterLap],
+        subset: DatasetSubset,
         config: Config,
         conv_settings: ConvolutionSettings,
         label_encoder: LabelEncoder,
         audio_preparation_hook: Callable | None = None,
-    ):
-        self.uris = uris
-        self.durations = durations
-        self.annotations = annotations
+    ) -> None:
+        self.uris = subset.uris
+        self.durations = subset.durations
+        self.annotations = subset.interlaps
 
         self.config = config
         self.conv_settings = conv_settings
@@ -317,16 +115,14 @@ class AudioSegmentationDataset(IterableDataset):
             conv_settings=self.conv_settings,
             sample_rate=config.audio.sample_rate,
             chunk_duration_s=config.audio.chunk_duration_s,
-            # TODO - strict_frames: True is pyannet - False if whisper
+            # NOTE - strict_frames: True is pyannet - False if whisper
             strict=config.audio.strict_frames,
         )
 
-        assert len(uris) == durations.shape[0], "Mismatch between URIs and durations."
+        assert len(self.uris) == self.durations.shape[0], (
+            "Mismatch between URIs and durations."
+        )
 
-    # FIXME - segma should be:
-    # FIXME - a receptive_field based audio-segmentation toolkit
-    # FIXME - with a modern and lightweight codebase that is well documented
-    # FIXME - modular and easily extensible (for different SSL and custom models)
     def __iter__(self) -> Generator[dict[str, np.ndarray | torch.Tensor], None, None]:
         """Randomly samples an 'self.config.audio.chunk_duration_s' second audio sample with its corresponding labels.
         The labels correspond to overlapping frames with 'displacement' settings obtained from the models `ConvolutionSettings`.
@@ -415,7 +211,7 @@ class AudioSegmentationDataset(IterableDataset):
 
         return audio_t.squeeze()
 
-    def __len__(self):
+    def __len__(self) -> int:
         """Estimate the number of audio chunks sampled in one epoch.
 
         Since this is an `IterableDataset`, `__len__` provides a hint to the training loop
@@ -504,7 +300,7 @@ def windows_to_targets(
     y_target = []
     for w in windows:
         start, end = w
-        intersecting_labels = set([label for _, _, label in labels.find((start, end))])
+        intersecting_labels = {label for _, _, label in labels.find((start, end))}
 
         # NOTE - given a set of labels, return the one_hot representation
         y_target.append(label_encoder.one_hot(intersecting_labels))

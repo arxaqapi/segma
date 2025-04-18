@@ -20,7 +20,7 @@ def s_to_ms(s: float | np.ndarray) -> float | np.ndarray:
 def seconds_to_frames(
     s: float | np.ndarray, sample_rate: int = 16_000
 ) -> int | np.ndarray:
-    return np.floor(s * sample_rate)
+    return int(s * sample_rate)
 
 
 def milliseconds_to_frames(

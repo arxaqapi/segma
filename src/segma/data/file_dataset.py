@@ -308,11 +308,12 @@ class SegmaFileDataset:
         Returns:
             bool: Return True if the dataset has been loaded, else return False.
         """
-        if raises:
-            raise DatasetNotLoadedError
-        return (
+        is_loaded = (
             self.subds_to_durations is not None and self.subds_to_interlaps is not None
         )
+        if raises and not is_loaded:
+            raise DatasetNotLoadedError
+        return is_loaded
 
     @classmethod
     def clean_cache(cls, base_p: str | Path) -> None:

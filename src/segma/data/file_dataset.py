@@ -8,6 +8,7 @@ import numpy as np
 import torchaudio
 from interlap import InterLap
 
+from segma.config import Config
 from segma.data.utils import (
     create_interlap_from_annotation,
     filter_annotations,
@@ -95,6 +96,15 @@ class SegmaFileDataset:
         # Call `.load()` to populate the next 2 variables
         self.subds_to_durations: None | dict[str, np.ndarray] = None
         self.subds_to_interlaps: None | dict[str, list[InterLap]] = None
+
+    @classmethod
+    def from_config(cls, config: Config):
+        return cls(
+            config.data.dataset_path,
+            config.data.classes,
+            config.audio.chunk_duration_s,
+            config.audio.sample_rate,
+        )
 
     def check_for_data_leakage(self, subset_to_uris: dict[str, set[str]]) -> None:
         """Check that the uris sets do not intersect.

@@ -8,6 +8,15 @@ f format:
 	@uv run ruff format
 	@uv run ruff check
 
+stats:
+	@uv run ruff check --statistics
+
+
+add-noqa:
+	@echo "adds noqa to all failing lines"
+	@echo "too breaking to add to the project"
+# uv run ruff check --add-noqa
+
 tc type-check:
 	@uv run mypy --disallow-untyped-defs .
 

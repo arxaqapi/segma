@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Self
 
-from .utils.conversions import second_to_millisecond
+from .utils.conversions import second_to_millisecond, seconds_to_frames
 
 
 @dataclass
@@ -48,6 +48,18 @@ class AudioAnnotation:
     @property
     def end_time_ms(self) -> float:
         return second_to_millisecond(self.end_time_s)
+
+    @property
+    def start_time_f(self) -> int:
+        return seconds_to_frames(self.start_time_s)
+
+    @property
+    def duration_f(self) -> int:
+        return seconds_to_frames(self.duration_s)
+
+    @property
+    def end_time_f(self) -> int:
+        return seconds_to_frames(self.end_time_s)
 
     @property
     def end_time_s(self) -> float:

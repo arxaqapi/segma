@@ -13,6 +13,8 @@ scripts/extra/*.tsv
 
 # extra
 .vscode
+.cache
+.benchmarks
 
 # Python-generated files
 __pycache__/

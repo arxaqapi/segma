@@ -1,8 +1,8 @@
-from collections import defaultdict
+from collections import Counter
 from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
 import numpy as np
 import torchaudio
@@ -32,7 +32,7 @@ class CacheTooOldError(Exception):
 
 @dataclass
 class DatasetSubset:
-    uris: set
+    uris: list
     durations: np.ndarray
     interlaps: list[InterLap]
 
@@ -91,14 +91,14 @@ class SegmaFileDataset:
             ],
             set[str],
         ] = {}
-        self.subset_to_uris = self.load_all_uris()
+        self.subset_to_uris: dict[str, list[str]] = self.load_all_uris()
 
         # Call `.load()` to populate the next 2 variables
         self.subds_to_durations: None | dict[str, np.ndarray] = None
         self.subds_to_interlaps: None | dict[str, list[InterLap]] = None
 
     @classmethod
-    def from_config(cls, config: Config):
+    def from_config(cls, config: Config) -> Self:
         return cls(
             config.data.dataset_path,
             config.data.classes,
@@ -106,7 +106,7 @@ class SegmaFileDataset:
             config.audio.sample_rate,
         )
 
-    def check_for_data_leakage(self, subset_to_uris: dict[str, set[str]]) -> None:
+    def check_for_data_leakage(self, subset_to_uris: dict[str, list[str]]) -> None:
         """Check that the uris sets do not intersect.
         Parirwise set intersection is checked such that they are empty.
 
@@ -117,37 +117,34 @@ class SegmaFileDataset:
             URISubsetLeakageError: Raises when there is data leakage between two dataset subset.
         """
         for k1, k2 in combinations(self.SUBSET_NAMES, 2):
-            overlap = subset_to_uris[k1] & subset_to_uris[k2]
+            overlap = set(subset_to_uris[k1]) & set(subset_to_uris[k2])
             if overlap:
                 raise URISubsetLeakageError(
                     f"Subset {k1} and {k2} are overlaping, which can be data leakage.\nOverlapping uris are: '{overlap=}'"
                 )
 
-    def load_all_uris(self) -> dict[str, set[str]]:
+    def load_all_uris(self) -> dict[str, list[str]]:
         """For each subset defined in `SUBSET_NAMES`, load all uris
         and filter out uris present in `exclude.txt`.
 
         Returns:
             dict[str, set[str]]: _description_
         """
-        subset_to_uris: dict[str, set[str]] = defaultdict(set)
+        subset_to_uris: dict[str, list[str]] = {}
         for subset in self.SUBSET_NAMES:
             uri_list_p = (self.base_p / subset).with_suffix(".txt")
             # NOTE - checks for uri deduplication in list of uris
             uri_list = load_uris(uri_list_p) if uri_list_p.exists() else []
-            subset_to_uris[subset] = set(uri_list)
-            subset_duplicate = {
-                uri for uri in uri_list if uri in subset_to_uris[subset]
-            }
-            if subset_duplicate:
-                self.removed_uris[f"duplicate.{subset}"] = subset_duplicate
-
+            duplicates = [x for x, y in Counter(uri_list).items() if y > 1]
+            if len(duplicates):
+                self.removed_uris[f"duplicate.{subset}"] = duplicates
+            subset_to_uris[subset] = uri_list
         # NOTE - handle exclusion file
         exclude_p = self.base_p / "exclude.txt"
         if exclude_p.exists():
             uris_to_remove = set(load_uris(exclude_p))
             subset_to_uris = {
-                subset: set(filter(lambda e: e not in uris_to_remove, uris))
+                subset: list(filter(lambda e: e not in uris_to_remove, uris))
                 for subset, uris in subset_to_uris.items()
             }
             self.removed_uris["exclude.txt"] = uris_to_remove
@@ -194,7 +191,9 @@ class SegmaFileDataset:
         # NOTE remove if not valid
         self.removed_uris["invalid"] = uris_to_remove
         for subset in self.SUBSET_NAMES:
-            self.subset_to_uris[subset] -= uris_to_remove
+            self.subset_to_uris[subset] = list(
+                filter(lambda e: e not in uris_to_remove, self.subset_to_uris[subset])
+            )
 
         for subset, uris in self.subset_to_uris.items():
             if len(uris) == 0:

@@ -132,7 +132,8 @@ def test_SegmaFileDataset_init_w_exclude_invalid(_prepare_dummy_ds):
 def test_non_existant_ds():
     ds_path = Path("tests/sample/missing_dataset")
     with pytest.raises(
-        FileNotFoundError, match=f"Given path to the dataset is non existent. Got `{ds_path}`."
+        FileNotFoundError,
+        match=f"Given path to the dataset is non existent. Got `{ds_path}`.",
     ):
         SegmaFileDataset(
             ds_path,
@@ -149,7 +150,7 @@ def test_SegmaFileDataset_save_cache(_prepare_dummy_ds):
     )
 
     sfd.load()
-    
+
     assert (Path(".cache/segma") / sfd.base_p / "subds_to_durations").exists()
     assert (Path(".cache/segma") / sfd.base_p / "subds_to_interlaps").exists()
 

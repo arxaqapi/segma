@@ -17,7 +17,6 @@ dependencies = [
     "pyyaml>=6.0.2",
     "scipy>=1.14.1",
     "soundfile>=0.12.1; sys_platform == 'darwin'",
-    "sox>=1.5.0 ; sys_platform == 'linux'",
     "torch>=2.4.1",
     "torchaudio>=2.4.1",
     "transformers>=4.47.1",

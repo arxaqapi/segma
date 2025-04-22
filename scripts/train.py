@@ -20,10 +20,12 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from segma.config import Config, load_config
 from segma.data import SegmaFileDataset, SegmentationDataLoader
 from segma.models import (
+    HydraWavLM,
     HydraWhisper,
     Models,
     PyanNet,
     PyanNetSlim,
+    SurgicalHydraWavLM,
     SurgicalWhisper,
     Whisperidou,
     WhisperiMax,
@@ -90,6 +92,8 @@ if __name__ == "__main__":
         | PyanNetSlim
         | SurgicalWhisper
         | HydraWhisper
+        | HydraWavLM
+        | SurgicalHydraWavLM
     ) = Models[cfg.model.name](l_encoder, cfg)
 
     mode, monitor = get_metric(cfg.train.validation_metric)

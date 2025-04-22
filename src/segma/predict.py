@@ -223,8 +223,9 @@ def sliding_prediction(
         # predicted output, to be processed
         # (batch, windows, n_labels)
         batch_t = model.audio_preparation_hook(batch_t.cpu().numpy())
-        # REVIEW
-        batch_t = torch.clone(batch_t)
+        # REVIEW need to check if it's appropriate
+        #batch_t = torch.clone(batch_t)
+        batch_t = torch.from_numpy(batch_t)
 
         # NOTE - pass batch through model
         with torch.no_grad():

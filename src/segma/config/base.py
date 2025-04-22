@@ -141,6 +141,22 @@ class SurgicalHydraConfig(BaseConfig):
 
 
 @dataclass
+class HydraWavLMConfig(BaseConfig):
+    wav_encoder: str
+    lstm: LSTMConfig
+    classifier: int
+
+
+@dataclass
+class SurgicalHydraWavLMConfig(BaseConfig):
+    wav_encoder: str
+    encoder_layers: list[int]
+    reduction: Literal["average", "weighted"]
+    lstm: LSTMConfig
+    classifier: int
+
+
+@dataclass
 class ModelConfig(BaseConfig):
     name: str
     # is initialized as None in first pass, then as the correct model class manually (sub-optimal)
@@ -153,6 +169,8 @@ class ModelConfig(BaseConfig):
         | SurgicalWhisperConfig
         | HydraWhisperConfig
         | SurgicalHydraConfig
+        | HydraWavLMConfig
+        | SurgicalHydraWavLMConfig
     )
 
 
@@ -210,7 +228,6 @@ def load_config(config_path: Path | str, cli_extra_args: list[str] = []) -> Conf
             )
         with model_c_p.open("r") as f:
             config_d["model"]["config"] = yaml.safe_load(f)
-
     # NOTE - merge with extra_args_dict
     config_d = OmegaConf.merge(config_d, OmegaConf.from_cli(cli_extra_args))
     config_d = OmegaConf.to_object(config_d)

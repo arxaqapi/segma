@@ -14,3 +14,4 @@ runs:
     
     - name: Install segma
       run: uv sync --locked --all-extras
+      shell: bash

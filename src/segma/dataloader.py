@@ -188,7 +188,7 @@ class SegmentationDataLoader(pl.LightningDataModule):
         for subset, uris in self.uris.items():
             if len(uris) == 0:
                 raise ValueError(
-                    f"subset '{subset}' is empty after removing all audio instances with duration < {self.config.audio.chunk_duration_s} s and all audios/segments with invalid labels."
+                    f"subset '{subset}' is empty after removing all audio instances with duration < {self.config.chunk_duration_s} s and all audios/segments with invalid labels."
                 )
 
         # NOTE - load all annotations as mapping from subset to list of Interlap object (that allows fast query for `y` vector construction)

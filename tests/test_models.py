@@ -38,10 +38,31 @@ def test_models():
 def test_Whisper_based_forward():
     labels = ("aa", "bb", "cc")
 
-    x_t = torch.ones((1, 80, 3000))
+    x_t = torch.ones((2, 80, 3000))
 
     for model_name, model_c in Models.items():
-        if "whisper" in model_name or "hydra" in model_name:
+        if (
+            "whisper" in model_name or "hydra" in model_name
+        ) and "wavlm" not in model_name:
+            label_encoder = (
+                MultiLabelEncoder(labels)
+                if "hydra" in model_name
+                else PowersetMultiLabelEncoder(labels)
+            )
+            cfg: Config = load_config(
+                config_path=f"tests/sample/temp_config_{model_name}.yml",
+            )
+            _out = model_c(label_encoder, cfg)(x_t)
+
+
+def test_WavLM_based_forward():
+    labels = ("aa", "bb", "cc")
+
+    # Takes in raw audio
+    x_t = torch.ones((2, 32_000))
+
+    for model_name, model_c in Models.items():
+        if "wavlm" in model_name:
             label_encoder = (
                 MultiLabelEncoder(labels)
                 if "hydra" in model_name

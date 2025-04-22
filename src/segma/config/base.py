@@ -143,6 +143,7 @@ class SurgicalHydraConfig(BaseConfig):
 @dataclass
 class ModelConfig(BaseConfig):
     name: str
+    chkp_path: str | None
     # is initialized as None in first pass, then as the correct model class manually (sub-optimal)
     config: (
         None

@@ -29,5 +29,7 @@ __all__ = [
     "SurgicalWhisper",
     "HydraWhisper",
     "SurgicalHydra",
-    "HydraWavLMSurgicalHydraWavLMModels",
+    "HydraWavLM",
+    "SurgicalHydraWavLM",
+    "Models",
 ]

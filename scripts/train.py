@@ -76,7 +76,8 @@ if __name__ == "__main__":
     if cfg.train.seed:
         set_seed(cfg.train.seed)
 
-    chkp_path = Path("models")
+    chkp_path = Path(cfg.model.chkp_pth)
+    # FIXME - mkdir or not ?
     if not chkp_path.exists():
         chkp_path.mkdir()
 
@@ -131,7 +132,7 @@ if __name__ == "__main__":
     )
 
     reference_time = datetime.fromtimestamp(time.time()).strftime("%Y%m%d_%H%M%S")
-    save_path = Path("models") / f"{reference_time}"
+    save_path = chkp_path / f"{reference_time}"
 
     print("[log] - use WandbLogger")
 

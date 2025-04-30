@@ -110,6 +110,9 @@ class SurgicalHydra(BaseSegmentationModel):
             # name: nn.functional.sigmoid(head(lstm_out))
             for name, head in self.task_heads.items()
         }
+        return torch.stack(
+            [head(lstm_out) for head in self.task_heads.values()], dim=-1
+        )
 
     def training_step(self, batch, batch_idx):
         x = batch["x"]

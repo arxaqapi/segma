@@ -5,13 +5,13 @@ from math import floor, prod
 import lightning as pl
 import matplotlib.pyplot as plt
 import torch
+import wandb
 from torchmetrics.functional.classification import (
     multiclass_auroc,
     multiclass_f1_score,
     multiclass_roc,
 )
 
-import wandb
 from segma.config.base import Config
 from segma.utils.encoders import LabelEncoder
 
@@ -21,6 +21,12 @@ class ConvolutionSettings:
     kernels: tuple[int, ...]
     strides: tuple[int, ...]
     paddings: tuple[int, ...]
+
+    def __post_init__(self):
+        if not (len(self.kernels) == len(self.strides) == len(self.paddings)):
+            raise ValueError(
+                "Given settings do not match, please provide matching dimensions for kernels, strides and paddings."
+            )
 
     def rf_start_i(self, u_L: int) -> int:
         """Computes the start index of the receptive field.
@@ -95,6 +101,19 @@ class ConvolutionSettings:
 
         return u_L * S_0 + (self.rf_size() - 1) / 2 - P_0
 
+    def rf_step(self) -> int:
+        """Returns the step size (stride) between 2 receptive fields.
+
+        Returns:
+            int: step size/stride between 2 receptive fields.
+        """
+        assert (
+            abs(self.rf_start_i(0) - self.rf_start_i(1))
+            == abs(self.rf_end_i(0) - self.rf_end_i(1))
+            == abs(self.rf_center_i(0) - self.rf_center_i(1))
+        )
+        return abs(self.rf_start_i(0) - self.rf_start_i(1))
+
     def n_windows(self, chunk_duration_f: int, strict: bool = True) -> int:
         """Compute the total number of convolution windows that can fit in a given audio chunk.
 
@@ -113,7 +132,7 @@ class ConvolutionSettings:
 
         # Should be 320 (f) with duration 2 secs and whisper model
         # Should be 270 (f) with duration 2 secs and sinc model
-        rf_step = int(self.rf_center_i(5) - self.rf_center_i(4) + correction)
+        rf_step = int(self.rf_step() + correction)
 
         if strict:
             return floor((chunk_duration_f - self.rf_size()) / rf_step)
@@ -139,6 +158,7 @@ class BaseSegmentationModel(pl.LightningModule):
             if weight_loss
             else None
         )
+        self.conv_settings = ConvolutionSettings((0,), (0,), (0,))
 
         self.save_hyperparameters(self.config.as_dict())
 

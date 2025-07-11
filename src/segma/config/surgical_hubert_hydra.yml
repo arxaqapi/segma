@@ -1,0 +1,12 @@
+#wav_encoder : /store/scratch/tcharlot/models/hubert_iter2/epoch=17-step=400000.ckpt
+wav_encoder : hubert_base
+encoder_layers: []
+reduction: weighted
+
+lstm:
+  hidden_size: 128
+  num_layers: 2
+  bidirectional: true
+  dropout: 0.5
+
+classifier: 256

@@ -26,6 +26,7 @@ from segma.models import (
     PyanNet,
     PyanNetSlim,
     SurgicalHydraWavLM,
+    SurgicalHydraHubert,
     SurgicalWhisper,
     Whisperidou,
     WhisperiMax,
@@ -76,7 +77,8 @@ if __name__ == "__main__":
     if cfg.train.seed:
         set_seed(cfg.train.seed)
 
-    chkp_path = Path("models")
+    chkp_path = Path(cfg.model.chkp_path)
+    # FIXME - mkdir or not ?
     if not chkp_path.exists():
         chkp_path.mkdir()
 
@@ -94,6 +96,7 @@ if __name__ == "__main__":
         | HydraWhisper
         | HydraWavLM
         | SurgicalHydraWavLM
+        | SurgicalHydraHubert
     ) = Models[cfg.model.name](l_encoder, cfg)
 
     mode, monitor = get_metric(cfg.train.validation_metric)
@@ -131,7 +134,7 @@ if __name__ == "__main__":
     )
 
     reference_time = datetime.fromtimestamp(time.time()).strftime("%Y%m%d_%H%M%S")
-    save_path = Path("models") / f"{reference_time}"
+    save_path = chkp_path / f"{reference_time}"
 
     print("[log] - use WandbLogger")
 
@@ -154,7 +157,7 @@ if __name__ == "__main__":
     model_checkpoint = ModelCheckpoint(
         monitor=monitor,
         mode=mode,
-        save_top_k=-1,
+        save_top_k=5,
         # every_n_epochs=1,
         save_last=True,
         dirpath=chkp_path,

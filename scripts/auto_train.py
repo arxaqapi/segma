@@ -20,10 +20,13 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from segma.config import Config, load_config
 from segma.data import SegmaFileDataset, SegmentationDataLoader
 from segma.models import (
+    HydraWavLM,
     HydraWhisper,
     Models,
     PyanNet,
     PyanNetSlim,
+    SurgicalHydraWavLM,
+    SurgicalHydraHubert,
     SurgicalWhisper,
     Whisperidou,
     WhisperiMax,
@@ -68,6 +71,11 @@ if __name__ == "__main__":
         help="Resume training, pass in checkpoint path.",
     )
     parser.add_argument(
+        "--all-weights",
+        action="store_true",
+        help="Finetune all weights of the model",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="experiments",
@@ -90,6 +98,18 @@ if __name__ == "__main__":
     if not experiment_path.exists():
         experiment_path.mkdir()
 
+    if args.all_weights:
+        config.train.all_weights = True
+
+    save_path = experiment_path / args.run_id
+    save_path.mkdir(parents=True, exist_ok=True)
+    config.save(save_path / "config.yml")
+
+    chkp_path = save_path / "checkpoints"
+    chkp_path.mkdir(parents=True, exist_ok=True)
+    last_ckpt = chkp_path / "last.ckpt"
+
+
     if "hydra" in config.model.name:
         l_encoder = MultiLabelEncoder(labels=config.data.classes)
     else:
@@ -102,6 +122,9 @@ if __name__ == "__main__":
         | PyanNetSlim
         | SurgicalWhisper
         | HydraWhisper
+        | HydraWavLM
+        | SurgicalHydraWavLM
+        | SurgicalHydraHubert
     ) = Models[config.model.name](l_encoder, config)
 
     mode, monitor = get_metric(config.train.validation_metric)
@@ -118,13 +141,21 @@ if __name__ == "__main__":
 
     model.configure_optimizers = MethodType(configure_optimizers, model)
 
-    print(
-        f"[log @ {datetime.now().strftime('%Y%m%d_%H:%M:%S')}] - SegmentationDataLoader initializing ...",
-        flush=True,
-    )
+    if args.all_weights:
+        #model.train()
+        for param in model.parameters():
+            param.requires_grad = True
+        for module in model.modules():
+            module.train()
+
+    print("segmafile loading")
     sfd = SegmaFileDataset.from_config(config)
     sfd.load()
 
+    print(
+            f"[log @ {datetime.now().strftime('%Y%m%d_%H:%M:%S')}] - SegmentationDataLoader initializing ...",
+            flush=True,
+        )
     dm = SegmentationDataLoader(
         dataset=sfd,
         label_encoder=l_encoder,
@@ -137,25 +168,21 @@ if __name__ == "__main__":
         flush=True,
     )
 
-    save_path = experiment_path / args.run_id
-    save_path.mkdir(parents=True, exist_ok=True)
-    config.save(save_path / "config.yml")
-
-    chkp_path = save_path / "checkpoints"
-    chkp_path.mkdir(parents=True, exist_ok=True)
-    last_ckpt = chkp_path / "last.ckpt"
+    
 
     print("[log] - use WandbLogger")
     logger = WandbLogger(
         project=config.wandb.project,
         name=config.wandb.name,
-        id=args.run_id,
+        id=args.run_id.split("-")[-1],
         log_model=False if config.wandb.offline else "all",
         tags=args.tags,
         offline=config.wandb.offline,
         resume="must" if args.auto_resume and last_ckpt.exists() else None,  # "never",
     )
-    logger.experiment.config.update(config)
+    # Allow val_change maybe not best idea but needed it for some reason
+    # TODO
+    logger.experiment.config.update(config, allow_val_change=True)
     # save_path = save_path.with_stem(save_path.stem + f"-{logger.experiment.id}")
 
     model_checkpoint = ModelCheckpoint(
@@ -178,20 +205,38 @@ if __name__ == "__main__":
     )
 
     # NOTE - from scratch training and resume
-    trainer = pl.Trainer(
-        accelerator="gpu",
-        devices=1,
-        max_epochs=config.train.max_epochs,
-        logger=logger,
-        callbacks=[
-            model_checkpoint,
-            early_stopping,
-            LearningRateMonitor(),
-            TQDMProgressBar(1000 if "debug" not in config.data.dataset_path else 1),
-        ],
-        # profiler="advanced"
-        profiler=config.train.profiler,
-    )
+    if args.all_weights:
+        trainer = pl.Trainer(
+            accelerator="gpu",
+            #devices=1,
+            devices=4,
+            strategy="ddp_find_unused_parameters_true",
+            max_epochs=config.train.max_epochs,
+            logger=logger,
+            callbacks=[
+                model_checkpoint,
+                early_stopping,
+                LearningRateMonitor(),
+                TQDMProgressBar(1000 if "debug" not in config.data.dataset_path else 1),
+            ],
+            # profiler="advanced"
+            profiler=config.train.profiler,
+        )
+    else:
+        trainer = pl.Trainer(
+            accelerator="gpu",
+            devices=1,
+            max_epochs=config.train.max_epochs,
+            logger=logger,
+            callbacks=[
+                model_checkpoint,
+                early_stopping,
+                LearningRateMonitor(),
+                TQDMProgressBar(1000 if "debug" not in config.data.dataset_path else 1),
+            ],
+            # profiler="advanced"
+            profiler=config.train.profiler,
+        )
 
     # https://pytorch.org/docs/main/torch.compiler_troubleshooting.html#dealing-with-recompilations
     # https://docs.google.com/document/d/1y5CRfMLdwEoF1nTk9q8qEu1mgMUuUtvhklPKJ2emLU8/edit?tab=t.0#heading=h.t130sdb4rshr

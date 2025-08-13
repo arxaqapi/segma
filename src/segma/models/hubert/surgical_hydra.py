@@ -52,6 +52,15 @@ class SurgicalHydraHubert(BaseSegmentationModel):
             raise ValueError(
                 f"Should not happen, `{self.config.model.config.reduction=}` should be `average` or `weighted`"
             )
+        
+        self.sequence_classifier = "speech-maturity" in config.data.dataset_path
+
+        if False:#self.sequence_classifier:
+            self.conv1 = nn.Conv1d(768, 768, kernel_size=3, stride=1, padding=1)  # keeps length
+            self.conv2 = nn.Conv1d(768, 768, kernel_size=3, stride=1, padding=1)
+            self.norm = nn.LayerNorm(768)
+            self.attn_conv = nn.Linear(768, 1)
+
         #TODO bad habit dimension fixed
         self.lstm_shared = nn.LSTM(
             input_size=768,
@@ -102,8 +111,21 @@ class SurgicalHydraHubert(BaseSegmentationModel):
             hidden_states_t,
         )
 
+        #take the weighteds and convolve them from (B, S, hidden) to (B,1,hidden) here
+        if False :#self.sequence_classifier:
+            x = weighted_t.transpose(1,2)
+            x = self.conv1(x)
+            x = self.conv2(x)
+            x = x.transpose(1, 2)  # (B, 28, 768)
+            x = self.norm(x)
+            weights = self.attn_conv(x).softmax(dim=1)
+            x = (x * weights).sum(dim=1, keepdim=True)
+            lstm_out, _ = self.lstm_shared(x)
+
         # (batch, 99, lstm.hidden_size)
-        lstm_out, _ = self.lstm_shared(weighted_t)
+        else : 
+            lstm_out, _ = self.lstm_shared(weighted_t)
+        
         return {
             name: head(lstm_out)
             # NOTE - sigmoid is added in BCEWithLogitsLoss, return only logits
@@ -114,14 +136,19 @@ class SurgicalHydraHubert(BaseSegmentationModel):
     def training_step(self, batch, batch_idx):
         x = batch["x"]
         y_target = batch["y"]
+        #if we want to repeat the targets to make VTC like predictions
+        #y_target = y_target.repeat(1,28,1)
         y_pred_heads = self.forward(x)
+        #add sigmoid here 
+
+        
         # 'linear_head_male', 'linear_head_female',
         # 'linear_head_key_child', 'linear_head_other_child'
-
+        # batch and windows merged, maybe not because no window
         # reduce first 2 dimensions (batch and windows can be merged)
         n_labels = len(self.label_encoder.labels)
         # (batch * n_windows, 4)
-        y_target = y_target.view(-1, n_labels)
+        y_target = y_target.view(-1, n_labels)#.repeat_interleave(28)
         # (batch * n_windows) - flattened, usefull when slicing target vector at the end
         y_preds = {k: y_pred.view(-1) for k, y_pred in y_pred_heads.items()}
 
@@ -132,7 +159,7 @@ class SurgicalHydraHubert(BaseSegmentationModel):
             )
             for i, (k, y_pred) in enumerate(y_preds.items())
         }
-
+        #average pooling 28 x N 
         loss = torch.stack(list(head_losses.values())).sum()
         self.log(
             "train/loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
@@ -151,16 +178,20 @@ class SurgicalHydraHubert(BaseSegmentationModel):
     def validation_step(self, batch, batch_idx):
         x = batch["x"]
         y_target = batch["y"]
+        #repeat labels for vtc like prediction
+        #y_target = y_target.repeat(1,28,1)
         y_pred_heads = self.forward(x)
+        #add sigmoid here
+
+
         # 'linear_head_male', 'linear_head_female', 'linear_head_key_child', 'linear_head_other_child'
 
         # reduce first 2 dimensions (batch and windows can be merged)
         n_labels = len(self.label_encoder.labels)
         # (batch * n_windows, 4)
-        y_target = y_target.view(-1, n_labels)
+        y_target = y_target.view(-1, n_labels)#.repeat_interleave(28)
         # (batch * n_windows) - flattened, usefull when slicing target vector at the end
         y_preds = {k: y_pred.view(-1) for k, y_pred in y_pred_heads.items()}
-
         # NOTE - loss computation
         if (
             self.config.train.validation_metric == "loss"

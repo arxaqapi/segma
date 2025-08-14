@@ -109,7 +109,6 @@ if __name__ == "__main__":
     chkp_path.mkdir(parents=True, exist_ok=True)
     last_ckpt = chkp_path / "last.ckpt"
 
-
     if "hydra" in config.model.name:
         l_encoder = MultiLabelEncoder(labels=config.data.classes)
     else:
@@ -142,7 +141,7 @@ if __name__ == "__main__":
     model.configure_optimizers = MethodType(configure_optimizers, model)
 
     if args.all_weights:
-        #model.train()
+        # model.train()
         for param in model.parameters():
             param.requires_grad = True
         for module in model.modules():
@@ -153,9 +152,9 @@ if __name__ == "__main__":
     sfd.load()
 
     print(
-            f"[log @ {datetime.now().strftime('%Y%m%d_%H:%M:%S')}] - SegmentationDataLoader initializing ...",
-            flush=True,
-        )
+        f"[log @ {datetime.now().strftime('%Y%m%d_%H:%M:%S')}] - SegmentationDataLoader initializing ...",
+        flush=True,
+    )
     dm = SegmentationDataLoader(
         dataset=sfd,
         label_encoder=l_encoder,
@@ -167,8 +166,6 @@ if __name__ == "__main__":
         f"[log @ {datetime.now().strftime('%Y%m%d_%H:%M:%S')}] - SegmentationDataLoader initialized",
         flush=True,
     )
-
-    
 
     print("[log] - use WandbLogger")
     logger = WandbLogger(
@@ -208,8 +205,8 @@ if __name__ == "__main__":
     if args.all_weights:
         trainer = pl.Trainer(
             accelerator="gpu",
-            #devices=1,
-            devices=4,
+            # devices=1,
+            devices=2,
             strategy="ddp_find_unused_parameters_true",
             max_epochs=config.train.max_epochs,
             logger=logger,

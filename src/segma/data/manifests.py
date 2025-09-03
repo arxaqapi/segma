@@ -1,7 +1,5 @@
 import logging
-import re
 from pathlib import Path
-from typing import Dict, Tuple, Union
 
 import torch
 import torchaudio
@@ -53,5 +51,6 @@ def build_manifest_tar(path: Path | str, file_extension: str = ".wav", *, read_f
                 num_frames = torchaudio.info(data).num_frames if read_frames else None
             bytes_info[info.name] = (num_frames, tensor_len, info.offset_data, info.size)
     if not bytes_info:
-        raise NoAudioFileError(path, file_extension)
+        raise Exception("No bytes info")
+        #raise NoAudioFileError(path, file_extension)
     return _manifest_from_bytes_info(path, bytes_info)

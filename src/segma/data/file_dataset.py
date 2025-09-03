@@ -19,7 +19,6 @@ from segma.data.utils import (
 from segma.utils.conversions import frames_to_seconds
 
 from tqdm import tqdm
-import torch.distributed as dist
 
 class DatasetNotLoadedError(Exception): ...
 

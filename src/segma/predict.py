@@ -159,6 +159,7 @@ def sliding_prediction(
     save_logits: bool = False,
     thresholds: dict[str, dict[str, float]] | None = None,
     batch_size: int = 128,
+    archive_path: str = None,
 ):
     """do not open audio entirely
     - perform slide-wise"""
@@ -203,8 +204,26 @@ def sliding_prediction(
         max_number_batches = ceil((end_i - start_i) / chunck_size_f)
 
         # NOTE - load only necessary portion of the audio
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         audio_t, _sr = torchaudio.load(
-            audio_path.resolve(), frame_offset=start_i, num_frames=end_i - start_i
+                        audio_path.resolve(), frame_offset=start_i, num_frames=end_i - start_i
+            #read_from_archive(row["path"], row["byte_offset"], row["byte_size"] , archive_path), frame_offset=start_i, num_frames=end_i - start_i
         )
         # NOTE - if last meta_batch, look if padding necessary
         # TODO - improve padding mechanism
@@ -224,7 +243,7 @@ def sliding_prediction(
         # (batch, windows, n_labels)
         batch_t = model.audio_preparation_hook(batch_t.cpu().numpy())
         # REVIEW need to check if it's appropriate
-        #batch_t = torch.clone(batch_t)
+        # batch_t = torch.clone(batch_t)
         batch_t = torch.from_numpy(batch_t)
 
         # NOTE - pass batch through model

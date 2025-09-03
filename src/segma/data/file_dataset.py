@@ -18,6 +18,8 @@ from segma.data.utils import (
 )
 from segma.utils.conversions import frames_to_seconds
 
+from tqdm import tqdm
+import torch.distributed as dist
 
 class DatasetNotLoadedError(Exception): ...
 
@@ -71,6 +73,8 @@ class SegmaFileDataset:
         classes: list[str],
         chunk_duration_s: float,
         sample_rate: int = 16_000,
+        rank: int | None = None,
+        world_size : int | None = None
     ) -> None:
         self.base_p = Path(base_p)
         if not self.base_p.exists():
@@ -80,6 +84,12 @@ class SegmaFileDataset:
         self.classes = classes
         self.chunk_duration_s = chunk_duration_s
         self.sample_rate = sample_rate
+        if (rank is not None) and (world_size is not None):
+            self.dist = True
+            self.rank = rank
+            self.world_size = world_size
+        else: 
+            self.dist = False
 
         self.removed_uris: dict[
             Literal[
@@ -98,12 +108,14 @@ class SegmaFileDataset:
         self.subds_to_interlaps: None | dict[str, list[InterLap]] = None
 
     @classmethod
-    def from_config(cls, config: Config) -> Self:
+    def from_config(cls, config: Config, rank=None, world_size=None) -> Self:
         return cls(
             config.data.dataset_path,
             config.data.classes,
             config.audio.chunk_duration_s,
             config.audio.sample_rate,
+            rank,
+            world_size
         )
 
     def check_for_data_leakage(self, subset_to_uris: dict[str, list[str]]) -> None:
@@ -148,6 +160,11 @@ class SegmaFileDataset:
                 for subset, uris in subset_to_uris.items()
             }
             self.removed_uris["exclude.txt"] = uris_to_remove
+        if self.dist:
+            total_size = len(subset_to_uris["train"])
+            print(self.rank, total_size, self.world_size)
+            subset_to_uris["train"] = subset_to_uris["train"][self.rank : total_size : self.world_size]
+
         self.check_for_data_leakage(subset_to_uris)
         return subset_to_uris
 
@@ -163,7 +180,7 @@ class SegmaFileDataset:
         uris_to_remove: set[str] = set()
         for subset in self.SUBSET_NAMES:
             durations: list[tuple[int, int]] = []
-            for uri in self.subset_to_uris[subset]:
+            for uri in tqdm(self.subset_to_uris[subset]):
                 uri_path = (self.wav_p / uri).with_suffix(".wav").resolve()
                 info = torchaudio.info(uri=uri_path)
                 # NOTE - check that the audio is valid
@@ -200,7 +217,7 @@ class SegmaFileDataset:
                 raise ValueError(
                     f"subset '{subset}' is empty after removing all audio instances with duration < {self.chunk_duration_s} s and all audios/segments with invalid labels.\n"
                 )
-
+        print("Uris that have been removed", len(uris_to_remove))
         self.subds_to_durations = subds_to_durations
         self.subds_to_interlaps = subds_to_interlaps
 
@@ -261,7 +278,7 @@ class SegmaFileDataset:
         import time
 
         # REVIEW based on base_p
-        cache_path: Path = Path(".cache/segma") / self.base_p
+        cache_path: Path = Path(".cache/segma") / self.base_p.stem
         cache_path.mkdir(parents=True, exist_ok=True)
 
         subds_to_durations_p = cache_path / "subds_to_durations"
@@ -278,8 +295,8 @@ class SegmaFileDataset:
 
         # NOTE - if the has been create more than max_days days ago, trigger reloading and recaching
         if (
-            days_diff(subds_to_durations_p.stat().st_birthtime) > max_days
-            or days_diff(subds_to_interlaps_p.stat().st_birthtime) > max_days
+            days_diff(subds_to_durations_p.stat().st_ctime) > max_days
+            or days_diff(subds_to_interlaps_p.stat().st_ctime) > max_days
         ):
             raise CacheTooOldError(f"Cache is older than {max_days} days.")
 
@@ -297,9 +314,8 @@ class SegmaFileDataset:
         import pickle
 
         # REVIEW based on base_p
-        cache_path: Path = Path(".cache/segma") / self.base_p
+        cache_path: Path = Path(".cache/segma") / self.base_p.stem
         cache_path.mkdir(parents=True, exist_ok=True)
-
         with (cache_path / "subds_to_durations").open("wb") as bf:
             pickle.dump(self.subds_to_durations, bf)
         with (cache_path / "subds_to_interlaps").open("wb") as bf:

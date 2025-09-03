@@ -110,6 +110,10 @@ class AudioSegmentationDataset(IterableDataset):
         self.conv_settings = conv_settings
         self.label_encoder = label_encoder
         self.audio_preparation_hook = audio_preparation_hook
+        self.classify_sequence = "speech-maturity" in config.data.dataset_path
+
+        #self.archive_descriptor = 
+
 
         self.windows = generate_frames(
             conv_settings=self.conv_settings,
@@ -136,7 +140,6 @@ class AudioSegmentationDataset(IterableDataset):
         w_info = torch.utils.data.get_worker_info()
         # Ensures that each worker has a separate seed
         rng = np.random.default_rng(seed=w_info.seed if w_info else None)
-
         durations_f = seconds_to_frames(self.config.audio.chunk_duration_s)
         while True:
             # NOTE - 1. Sample a file depending on its annotated or audio duration
@@ -154,7 +157,6 @@ class AudioSegmentationDataset(IterableDataset):
                     high=self.durations["audio_duration_f"][uri_i] - durations_f,
                 )
             )
-
             # NOTE - 3. {'x': cropped audio from [start_idx: start_idx + duration]
             #     'y': overlaping frames corresponding to the model output [[...n-labels], ...] }
             # (32000)
@@ -165,6 +167,11 @@ class AudioSegmentationDataset(IterableDataset):
                 duration_f=durations_f,
             )
 
+            # if self.classify_sequence:
+            #    y_target = windows_to_targets(
+            #        np.asarray([[0,9216]]), self.label_encoder, self.annotations[uri_i]
+            #    )
+            # else :
             # NOTE - 4. generate corresponding sliding window 'y' vector and get labels
             windows = self.windows + start_index_f
             y_target = windows_to_targets(
@@ -203,7 +210,7 @@ class AudioSegmentationDataset(IterableDataset):
                 f"Error in `AudioSegmentationDataset.load_audio()`: `{duration_f=}` does not match expected `{n_expected_frames}` frames."
             )
         audio_t, _sr = torchaudio.load(
-            audio_file_p.resolve(), frame_offset=start_f, num_frames=duration_f
+            audio_file_p.resolve(), frame_offset=start_f, num_frames=duration_f, backend="soundfile"
         )
         # Downmix to mono if necessary
         if audio_t.shape[0] > 1:

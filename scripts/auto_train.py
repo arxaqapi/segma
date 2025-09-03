@@ -35,6 +35,7 @@ from segma.utils import set_seed
 from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
 from segma.utils.experiment import new_experiment_id
 
+import os
 
 def get_metric(metric: str) -> tuple[Literal["min", "max"], str]:
     match metric:
@@ -76,6 +77,11 @@ if __name__ == "__main__":
         help="Finetune all weights of the model",
     )
     parser.add_argument(
+        "--freeze-encoder",
+        action="store_true",
+        help="Finetune all weights of the model",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="experiments",
@@ -83,7 +89,17 @@ if __name__ == "__main__":
     )
     parser.add_argument("--run-id", "--id", type=str, help="ID of the run")
 
+    parser.add_argument("--n-gpus", type=int,default=1)
+    
+
     args, extra_args = parser.parse_known_args()
+    rank = int(os.environ["SLURM_PROCID"])
+    if args.n_gpus > 1:
+        print("RANK :", rank)
+        if rank is not None: 
+            world_size = args.n_gpus
+            print("LOCAL RANK : ", rank)
+            print("WORLD SIZE : ", world_size)
 
     if args.auto_resume and not args.run_id:
         raise ValueError("When passing auto-resume, please add a valid run-id")
@@ -138,7 +154,7 @@ if __name__ == "__main__":
             "monitor": monitor,
         }
 
-    model.configure_optimizers = MethodType(configure_optimizers, model)
+    
 
     if args.all_weights:
         # model.train()
@@ -147,9 +163,20 @@ if __name__ == "__main__":
         for module in model.modules():
             module.train()
 
+    if args.freeze_encoder:
+        for p in model.wav2vec2.feature_extractor.parameters():
+            p.requires_grad = False
+        model.wav2vec2.feature_extractor.eval()
+        
+    model.configure_optimizers = MethodType(configure_optimizers, model)
+        
     print("segmafile loading")
-    sfd = SegmaFileDataset.from_config(config)
-    sfd.load()
+    if args.n_gpus > 1: 
+        sfd = SegmaFileDataset.from_config(config,rank=rank,world_size=world_size)
+    else:
+        sfd = SegmaFileDataset.from_config(config)
+    
+    sfd.load(use_cache=False)
 
     print(
         f"[log @ {datetime.now().strftime('%Y%m%d_%H:%M:%S')}] - SegmentationDataLoader initializing ...",
@@ -167,25 +194,27 @@ if __name__ == "__main__":
         flush=True,
     )
 
-    print("[log] - use WandbLogger")
-    logger = WandbLogger(
-        project=config.wandb.project,
-        name=config.wandb.name,
-        id=args.run_id.split("-")[-1],
-        log_model=False if config.wandb.offline else "all",
-        tags=args.tags,
-        offline=config.wandb.offline,
-        resume="must" if args.auto_resume and last_ckpt.exists() else None,  # "never",
-    )
-    # Allow val_change maybe not best idea but needed it for some reason
-    # TODO
-    logger.experiment.config.update(config, allow_val_change=True)
-    # save_path = save_path.with_stem(save_path.stem + f"-{logger.experiment.id}")
-
+    if int(rank) == 0:
+        print("[log] - use WandbLogger")
+        logger = WandbLogger(
+            project=config.wandb.project,
+            name=config.wandb.name,
+            id=args.run_id.split("-")[-1],
+            log_model=False if config.wandb.offline else "all",
+            tags=args.tags,
+            offline=config.wandb.offline,
+            resume="must" if args.auto_resume and last_ckpt.exists() else None,  # "never",
+        )
+        # Allow val_change maybe not best idea but needed it for some reason
+        # TODO
+        logger.experiment.config.update(config, allow_val_change=True)
+        # save_path = save_path.with_stem(save_path.stem + f"-{logger.experiment.id}")
+    else:
+        logger=None
     model_checkpoint = ModelCheckpoint(
         monitor=monitor,
         mode=mode,
-        save_top_k=-1,
+        save_top_k=10,
         # every_n_epochs=1,
         save_last=True,
         dirpath=chkp_path,
@@ -202,11 +231,11 @@ if __name__ == "__main__":
     )
 
     # NOTE - from scratch training and resume
-    if args.all_weights:
+    if args.n_gpus > 1:
         trainer = pl.Trainer(
             accelerator="gpu",
             # devices=1,
-            devices=2,
+            devices=args.n_gpus,
             strategy="ddp_find_unused_parameters_true",
             max_epochs=config.train.max_epochs,
             logger=logger,
@@ -237,11 +266,11 @@ if __name__ == "__main__":
 
     # https://pytorch.org/docs/main/torch.compiler_troubleshooting.html#dealing-with-recompilations
     # https://docs.google.com/document/d/1y5CRfMLdwEoF1nTk9q8qEu1mgMUuUtvhklPKJ2emLU8/edit?tab=t.0#heading=h.t130sdb4rshr
-    if config.model.name in ("hydra_whisper", "HydraWhisper"):
-        torch._dynamo.config.accumulated_cache_size_limit = 32
-        if hasattr(torch._dynamo.config, "cache_size_limit"):
-            torch._dynamo.config.cache_size_limit = 32
-        model = torch.compile(model)
+    #if config.model.name in ("hydra_whisper", "HydraWhisper"):
+    torch._dynamo.config.accumulated_cache_size_limit = 32
+    if hasattr(torch._dynamo.config, "cache_size_limit"):
+        torch._dynamo.config.cache_size_limit = 32
+    model = torch.compile(model)
 
     print(f"[log @ {datetime.now().strftime('%Y%m%d_%H%M')}] - started training")
     if args.auto_resume and last_ckpt.exists():

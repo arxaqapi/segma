@@ -177,18 +177,19 @@ class ModelConfig(BaseConfig):
 
 @dataclass
 class TrainConfig(BaseConfig):
+    
     lr: float
     batch_size: int
     max_epochs: int
     validation_metric: str
     extra_val_metrics: list[str]
     profiler: str | None
-
+    
     dataloader: DataloaderConfig
 
     scheduler: SchedulerConfig
     seed: int | None = None
-
+    lstm : bool | None = None
 
 @dataclass
 class Config(BaseConfig):

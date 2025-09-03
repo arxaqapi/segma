@@ -26,6 +26,12 @@ class SurgicalHydraHubert(BaseSegmentationModel):
 
         self.wav2vec2, self.encoder = load_hubert(self.config.model.config.wav_encoder)
 
+        if not config.train.lstm :
+            self.wav2vec2.feature_extractor.eval()
+            self.wav2vec2.feature_extractor._require_grad = False
+            for p in self.wav2vec2.feature_extractor.parameters():
+                p.requires_grad = False
+            
         if (
             config.model.config.encoder_layers is None
             or len(config.model.config.encoder_layers) == 0
@@ -47,6 +53,8 @@ class SurgicalHydraHubert(BaseSegmentationModel):
                 "layer_weights",
                 torch.ones(len(self.enc_layers_to_use)) / len(self.enc_layers_to_use),
             )
+        elif not config.train.lstm: 
+            pass
         else:
             raise ValueError(
                 f"Should not happen, `{self.config.model.config.reduction=}` should be `average` or `weighted`"
@@ -54,33 +62,34 @@ class SurgicalHydraHubert(BaseSegmentationModel):
 
         self.sequence_classifier = "speech-maturity" in config.data.dataset_path
 
-        if False:  # self.sequence_classifier:
-            self.conv1 = nn.Conv1d(
-                768, 768, kernel_size=3, stride=1, padding=1
-            )  # keeps length
-            self.conv2 = nn.Conv1d(768, 768, kernel_size=3, stride=1, padding=1)
-            self.norm = nn.LayerNorm(768)
-            self.attn_conv = nn.Linear(768, 1)
+        if config.train.lstm :
+            # TODO bad habit dimension fixed
+            self.lstm_shared = nn.LSTM(
+                input_size=768,
+                **config.model.config.lstm.as_dict(),
+            )
 
-        # TODO bad habit dimension fixed
-        self.lstm_shared = nn.LSTM(
-            input_size=768,
-            **config.model.config.lstm.as_dict(),
-        )
+            lstm_out_features = (
+                self.lstm_shared.hidden_size * 2
+                if self.lstm_shared.bidirectional
+                else self.lstm_shared.hidden_size
+            )
 
-        lstm_out_features = (
-            self.lstm_shared.hidden_size * 2
-            if self.lstm_shared.bidirectional
-            else self.lstm_shared.hidden_size
-        )
-
-        # NOTE - define x heads, one per label
-        self.task_heads = nn.ModuleDict(
-            {
-                f"linear_head_{label}": nn.Linear(lstm_out_features, 1)
-                for label in label_encoder.base_labels
-            }
-        )
+            # NOTE - define x heads, one per label
+            self.task_heads = nn.ModuleDict(
+                {
+                    f"linear_head_{label}": nn.Linear(lstm_out_features, 1)
+                    for label in label_encoder.base_labels
+                }
+            )
+        else:
+            self.dropout = nn.Dropout()
+            self.task_heads = nn.ModuleDict(
+                {
+                    f"linear_head_{label}": nn.Linear(in_features=768, out_features=1)
+                    for label in label_encoder.base_labels
+                }
+            )
 
         self.conv_settings = ConvolutionSettings(
             kernels=(10, 3, 3, 3, 3, 2, 2),
@@ -92,47 +101,59 @@ class SurgicalHydraHubert(BaseSegmentationModel):
 
     def forward(self, x: torch.Tensor):
         # TODO
-        hidden_states, _ = self.wav2vec2.extract_features(x, num_layers=None)
+       
+        x, lengths = self.wav2vec2.feature_extractor(x, None)
+        hidden_states = self.wav2vec2.encoder.extract_features(x, lengths, num_layers=None)
         # enc_x: BaseModelOutput = self.encoder(x, output_hidden_states=True)
         # hidden_states = enc_x.hidden_states[1:]
-        hidden_states_t = torch.stack(
-            [hidden_states[i] for i in self.enc_layers_to_use], dim=0
-        )
+        if self.config.train.lstm :
+            hidden_states_t = torch.stack(
+                [hidden_states[i] for i in self.enc_layers_to_use], dim=0
+            )
 
-        # NOTE - handle weighted encoder output
-        if self.config.model.config.reduction == "weighted":
-            weights = torch.nn.functional.softmax(self.layer_weights, dim=0)
+            # NOTE - handle weighted encoder output
+            if self.config.model.config.reduction == "weighted":
+                weights = torch.nn.functional.softmax(self.layer_weights, dim=0)
+            else:
+                # uniform weights for simple average
+                weights = self.layer_weights
+
+            weighted_t = torch.einsum(
+                "l,l...->...",
+                weights,
+                hidden_states_t,
+            )
+
+            # take the weighteds and convolve them from (B, S, hidden) to (B,1,hidden) here
+            if False:  # self.sequence_classifier:
+                x = weighted_t.transpose(1, 2)
+                x = self.conv1(x)
+                x = self.conv2(x)
+                x = x.transpose(1, 2)  # (B, 28, 768)
+                x = self.norm(x)
+                weights = self.attn_conv(x).softmax(dim=1)
+                x = (x * weights).sum(dim=1, keepdim=True)
+                lstm_out, _ = self.lstm_shared(x)
+
+            # (batch, 99, lstm.hidden_size)
+            else:
+                lstm_out, _ = self.lstm_shared(weighted_t)
+            return {
+                name: head(lstm_out)
+                # NOTE - sigmoid is added in BCEWithLogitsLoss, return only logits
+                # name: nn.functional.sigmoid(head(lstm_out))
+                for name, head in self.task_heads.items()
+            }
         else:
-            # uniform weights for simple average
-            weights = self.layer_weights
-
-        weighted_t = torch.einsum(
-            "l,l...->...",
-            weights,
-            hidden_states_t,
-        )
-
-        # take the weighteds and convolve them from (B, S, hidden) to (B,1,hidden) here
-        if False:  # self.sequence_classifier:
-            x = weighted_t.transpose(1, 2)
-            x = self.conv1(x)
-            x = self.conv2(x)
-            x = x.transpose(1, 2)  # (B, 28, 768)
-            x = self.norm(x)
-            weights = self.attn_conv(x).softmax(dim=1)
-            x = (x * weights).sum(dim=1, keepdim=True)
-            lstm_out, _ = self.lstm_shared(x)
-
-        # (batch, 99, lstm.hidden_size)
-        else:
-            lstm_out, _ = self.lstm_shared(weighted_t)
-
-        return {
-            name: head(lstm_out)
-            # NOTE - sigmoid is added in BCEWithLogitsLoss, return only logits
-            # name: nn.functional.sigmoid(head(lstm_out))
-            for name, head in self.task_heads.items()
-        }
+            x = self.dropout(hidden_states[-1])
+            #print("x shape", x.shape)
+            return {
+                
+                name: head(x)
+                # NOTE - sigmoid is added in BCEWithLogitsLoss, return only logits
+                # name: nn.functional.sigmoid(head(lstm_out))
+                for name, head in self.task_heads.items()
+            } 
 
     def training_step(self, batch, batch_idx):
         x = batch["x"]
@@ -171,7 +192,7 @@ class SurgicalHydraHubert(BaseSegmentationModel):
                 on_step=True,
                 on_epoch=True,
                 prog_bar=False,
-                logger=True,
+                logger=True
             )
         return loss
 
@@ -210,7 +231,7 @@ class SurgicalHydraHubert(BaseSegmentationModel):
                 on_step=True,
                 on_epoch=True,
                 prog_bar=True,
-                logger=True,
+                logger=True
             )
             for head_name, head_loss in head_losses.items():
                 self.log(
@@ -219,7 +240,7 @@ class SurgicalHydraHubert(BaseSegmentationModel):
                     on_step=True,
                     on_epoch=True,
                     prog_bar=False,
-                    logger=True,
+                    logger=True
                 )
 
         # NOTE - f1 score
@@ -242,7 +263,8 @@ class SurgicalHydraHubert(BaseSegmentationModel):
                     on_step=True,
                     on_epoch=True,
                     prog_bar=True,
-                    logger=True,
+                    logger=True
+
                 )
             # TODO - total f1_score using a merger of TP/FP ...
 

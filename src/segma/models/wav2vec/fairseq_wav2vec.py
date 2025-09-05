@@ -173,12 +173,12 @@ class FairseqWav2Vec2(nn.Module):
         self.include_CNN_layer=include_CNN_layer
         if not self.output_all_hiddens:
             logger.info(
-                f"include_CNN_layer is not used when output_all_hidden is False"
+                "include_CNN_layer is not used when output_all_hidden is False"
             )
         if self.output_all_hiddens:
-            self.tgt_layer==None
+            self.tgt_layer is None
             logger.warning(
-                f"Set tgt_layer to None when output_all_hiddens is True"
+                "Set tgt_layer to None when output_all_hiddens is True"
             )
 
     def forward(self, wav):

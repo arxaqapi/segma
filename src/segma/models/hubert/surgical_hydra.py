@@ -19,12 +19,18 @@ class SurgicalHydraHubert(BaseSegmentationModel):
         config: Config,
         weight_loss: bool = False,
         loss_f: str = "bce",
+        train: bool = True
     ) -> None:
         super().__init__(label_encoder, config, weight_loss)
         if not isinstance(label_encoder, MultiLabelEncoder):
             raise ValueError("Only MultiLabelEncoder is accepted for HydraWavLM.")
 
-        self.wav2vec2, self.encoder = load_hubert(self.config.model.config.wav_encoder)
+        if train:
+            self.wav2vec2 = load_hubert(self.config.model.config.wav_encoder)
+        else:
+            from torchaudio.models import hubert_pretrain_base
+            model = hubert_pretrain_base(num_classes=500)
+            self.wav2vec2 = model.wav2vec2
 
         if config.train.freeze_encoder:
             print("freeze encoder")
@@ -49,7 +55,7 @@ class SurgicalHydraHubert(BaseSegmentationModel):
             or len(config.model.config.encoder_layers) == 0
         ):
             self.enc_layers_to_use = list(
-                range(len(self.encoder.wav2vec2.encoder.transformer.layers))
+                range(len(self.wav2vec2.encoder.transformer.layers))
             )
         else:
             self.enc_layers_to_use = sorted(

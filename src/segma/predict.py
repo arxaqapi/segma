@@ -129,15 +129,15 @@ def interval_to_aa(intervals: Intervals, uri: str) -> list[AudioAnnotation]:
 
 
 def write_intervals(intervals: Intervals, audio_path: Path, output_p: Path):
-    rttm_out = output_p / "rttm"
-    aa_out = output_p / "aa"
+    rttm_out = output_p / "raw_rttm"
+    # aa_out = output_p / "aa"
     rttm_out.mkdir(exist_ok=True, parents=True)
-    aa_out.mkdir(exist_ok=True, parents=True)
+    # aa_out.mkdir(exist_ok=True, parents=True)
 
     uri = audio_path.stem
     with (
         (rttm_out / uri).with_suffix(".rttm").open("w") as rttm_f,
-        (aa_out / uri).with_suffix(".aa").open("w") as aa_f,
+        # (aa_out / uri).with_suffix(".aa").open("w") as aa_f,
     ):
         for start_f, end_f, label in intervals:
             aa = AudioAnnotation(
@@ -147,7 +147,7 @@ def write_intervals(intervals: Intervals, audio_path: Path, output_p: Path):
                 label=str(label),
             )
             rttm_f.write(aa.to_rttm() + "\n")
-            aa_f.write(aa.write() + "\n")
+            # aa_f.write(aa.write() + "\n")
 
 
 # TODO - add chunck_size_f as parameter of function
@@ -204,23 +204,6 @@ def sliding_prediction(
         max_number_batches = ceil((end_i - start_i) / chunck_size_f)
 
         # NOTE - load only necessary portion of the audio
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         audio_t, _sr = torchaudio.load(
                         audio_path.resolve(), frame_offset=start_i, num_frames=end_i - start_i
             #read_from_archive(row["path"], row["byte_offset"], row["byte_size"] , archive_path), frame_offset=start_i, num_frames=end_i - start_i

@@ -26,12 +26,24 @@ class SurgicalHydraHubert(BaseSegmentationModel):
 
         self.wav2vec2, self.encoder = load_hubert(self.config.model.config.wav_encoder)
 
-        if not config.train.lstm :
-            self.wav2vec2.feature_extractor.eval()
-            self.wav2vec2.feature_extractor._require_grad = False
-            for p in self.wav2vec2.feature_extractor.parameters():
+        if config.train.freeze_encoder:
+            print("freeze encoder")
+            for p in self.wav2vec2.parameters():
                 p.requires_grad = False
-            
+            for p in self.encoder.parameters():
+                p.requires_grad = False
+        else : 
+            print("Encoder all weights")
+            for p in self.wav2vec2.encoder.parameters():
+                p.requires_grad = True
+            print("freeze CNNs")
+            for p in self.encoder.parameters():
+                p.requires_grad = False
+            if config.train.freeze_extractor:
+                for p in self.wav2vec2.feature_extractor.parameters():
+                    p.requires_grad = False
+                    
+        self.config = config
         if (
             config.model.config.encoder_layers is None
             or len(config.model.config.encoder_layers) == 0
@@ -102,10 +114,14 @@ class SurgicalHydraHubert(BaseSegmentationModel):
     def forward(self, x: torch.Tensor):
         # TODO
        
-        x, lengths = self.wav2vec2.feature_extractor(x, None)
-        hidden_states = self.wav2vec2.encoder.extract_features(x, lengths, num_layers=None)
-        # enc_x: BaseModelOutput = self.encoder(x, output_hidden_states=True)
-        # hidden_states = enc_x.hidden_states[1:]
+
+        with torch.no_grad():
+            x, lengths = self.wav2vec2.feature_extractor(x, None)
+        if self.config.train.freeze_encoder:
+            with torch.no_grad():
+                hidden_states = self.wav2vec2.encoder.extract_features(x, lengths, num_layers=None)
+        else:
+            hidden_states = self.wav2vec2.encoder.extract_features(x, lengths, num_layers=None)
         if self.config.train.lstm :
             hidden_states_t = torch.stack(
                 [hidden_states[i] for i in self.enc_layers_to_use], dim=0
@@ -124,31 +140,12 @@ class SurgicalHydraHubert(BaseSegmentationModel):
                 hidden_states_t,
             )
 
-            # take the weighteds and convolve them from (B, S, hidden) to (B,1,hidden) here
-            if False:  # self.sequence_classifier:
-                x = weighted_t.transpose(1, 2)
-                x = self.conv1(x)
-                x = self.conv2(x)
-                x = x.transpose(1, 2)  # (B, 28, 768)
-                x = self.norm(x)
-                weights = self.attn_conv(x).softmax(dim=1)
-                x = (x * weights).sum(dim=1, keepdim=True)
-                lstm_out, _ = self.lstm_shared(x)
+            x, _ = self.lstm_shared(weighted_t)
 
-            # (batch, 99, lstm.hidden_size)
-            else:
-                lstm_out, _ = self.lstm_shared(weighted_t)
-            return {
-                name: head(lstm_out)
-                # NOTE - sigmoid is added in BCEWithLogitsLoss, return only logits
-                # name: nn.functional.sigmoid(head(lstm_out))
-                for name, head in self.task_heads.items()
-            }
         else:
             x = self.dropout(hidden_states[-1])
-            #print("x shape", x.shape)
-            return {
-                
+        
+        return {
                 name: head(x)
                 # NOTE - sigmoid is added in BCEWithLogitsLoss, return only logits
                 # name: nn.functional.sigmoid(head(lstm_out))
@@ -158,11 +155,7 @@ class SurgicalHydraHubert(BaseSegmentationModel):
     def training_step(self, batch, batch_idx):
         x = batch["x"]
         y_target = batch["y"]
-        # if we want to repeat the targets to make VTC like predictions
-        # y_target = y_target.repeat(1,28,1)
         y_pred_heads = self.forward(x)
-        # add sigmoid here
-
         # 'linear_head_male', 'linear_head_female',
         # 'linear_head_key_child', 'linear_head_other_child'
         # batch and windows merged, maybe not because no window
@@ -172,6 +165,12 @@ class SurgicalHydraHubert(BaseSegmentationModel):
         y_target = y_target.view(-1, n_labels)  # .repeat_interleave(28)
         # (batch * n_windows) - flattened, usefull when slicing target vector at the end
         y_preds = {k: y_pred.view(-1) for k, y_pred in y_pred_heads.items()}
+
+
+        #if self.global_step % 10 == 0:
+        #    print(self.global_step,[ (k,torch.mean(torch.sigmoid(h)).item(), torch.var(torch.sigmoid(h)).item(), torch.mean(torch.sigmoid(h[y_target[...,i] == 1])).item()) for i,(k,h) in enumerate(y_preds.items())])
+
+
 
         # FIXME - y_target should be one value per label
         head_losses = {

@@ -1,6 +1,7 @@
 from segma.models.pyannet import PyanNet, PyanNetSlim
 
 from .hubert.surgical_hydra import SurgicalHydraHubert
+from.wav2vec.surgical_hydra import SurgicalHydraWav2Vec
 from .wavlm.hydra import HydraWavLM
 from .wavlm.surgical_hydra import SurgicalHydraWavLM
 from .whisper.hydra import HydraWhisper
@@ -20,6 +21,7 @@ Models = {
     "wavlm_hydra": HydraWavLM,
     "surgical_wavlm_hydra": SurgicalHydraWavLM,
     "surgical_hubert_hydra": SurgicalHydraHubert,
+    "surgical_wav2vec_hydra": SurgicalHydraWav2Vec
 }
 
 
@@ -34,5 +36,6 @@ __all__ = [
     "HydraWavLM",
     "SurgicalHydraWavLM",
     "SurgicalHydraHubert",
+    "SurgicalHydraWav2Vec"
     "Models",
 ]

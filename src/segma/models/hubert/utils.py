@@ -26,11 +26,11 @@ def load_hubert(path: Path | str):
         bundle = torchaudio.pipelines.HUBERT_BASE
         wav2vec2 = bundle.get_model()
         model.wav2vec2 = wav2vec2
-    for param in model.parameters():
-        param.requires_grad = False
+
     for module in model.modules():
-        module.eval()
-    model.wav2vec2.feature_extractor._require_grad = False
+        module.train()
+    for param in model.parameters():
+        param.requires_grad = True
     return model.wav2vec2, model
 
 

@@ -23,26 +23,30 @@ class SurgicalHydraWav2Vec(BaseSegmentationModel):
         super().__init__(label_encoder, config, weight_loss)
         if not isinstance(label_encoder, MultiLabelEncoder):
             raise ValueError("Only MultiLabelEncoder is accepted for HydraWavLM.")
-
+        self.config = config
         self.model = load_wav2vec(self.config.model.config.wav_encoder)
 
         self.model.train()
         for param in self.model.parameters():
             param.requires_grad = True
 
+        for param in self.model.model.parameters():
+            param.requires_grad = True
 
-        if not config.train.lstm :
-            self.model.feature_extractor.eval()
-            self.model.feature_extractor._require_grad = False
-            for p in self.model.feature_extractor.parameters():
+        if config.train.freeze_encoder:
+            for p in self.model.model.parameters():
                 p.requires_grad = False
+        else:
+            if config.train.freeze_extractor :
+                for p in self.model.model.feature_extractor.parameters():
+                    p.requires_grad = False
             
         if (
             config.model.config.encoder_layers is None
             or len(config.model.config.encoder_layers) == 0
         ):
             self.enc_layers_to_use = list(
-                range(len(self.encoder.wav2vec2.encoder.transformer.layers))
+                range(len(self.model.model.encoder.layers))
             )
         else:
             self.enc_layers_to_use = sorted(
@@ -105,8 +109,11 @@ class SurgicalHydraWav2Vec(BaseSegmentationModel):
         # NOTE - copied from whisper/hydra.py
 
     def forward(self, x: torch.Tensor):
-        # TODO
-        hidden_states = self.model(x)
+        if self.config.train.freeze_encoder:
+            with torch.no_grad():
+                hidden_states = self.model(x)
+        else:
+            hidden_states = self.model(x)
         # enc_x: BaseModelOutput = self.encoder(x, output_hidden_states=True)
         # hidden_states = enc_x.hidden_states[1:]
         if self.config.train.lstm :
@@ -149,7 +156,6 @@ class SurgicalHydraWav2Vec(BaseSegmentationModel):
             }
         else:
             x = self.dropout(hidden_states[-1])
-            #print("x shape", x.shape)
             return {
                 
                 name: head(x)

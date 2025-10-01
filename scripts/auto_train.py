@@ -3,7 +3,8 @@ from datetime import datetime
 from pathlib import Path
 from types import MethodType
 from typing import Literal
-
+import numpy as np
+import random
 import lightning as pl
 import torch
 import torch._dynamo.config
@@ -36,6 +37,25 @@ from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
 from segma.utils.experiment import new_experiment_id
 
 import os
+
+def get_parameter_table(model: torch.nn.Module):
+    m_length = max(len(name) for name, _ in model.named_parameters()) + 2
+    total_params = 0
+    total_trainable_params = 0
+
+    print(f"{'Name':<{m_length}} | {'Params':<10} | {'Trainable params':<10}")
+    print("-" * (m_length + 32))
+    for name, p in model.named_parameters():
+        np = p.numel()
+        ntp = p.numel() if p.requires_grad else 0
+
+        total_params += np
+        total_trainable_params += ntp
+
+        print(f"{name:<{m_length}} | {np:<10} | {ntp:<10}")
+
+    # TODO - add percent trainable
+    print(total_params, total_trainable_params)
 
 def get_metric(metric: str) -> tuple[Literal["min", "max"], str]:
     match metric:
@@ -91,9 +111,22 @@ if __name__ == "__main__":
 
     parser.add_argument("--n-gpus", type=int,default=1)
     
-
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     args, extra_args = parser.parse_known_args()
-    rank = int(os.environ["SLURM_PROCID"])
+    
+    #set seed per rank
+    if "SLURM_ARRAY_TASK_ID" in os.environ:
+        rank = int(os.environ["SLURM_ARRAY_TASK_ID"])
+    else :
+        rank = 0
+    print("rank : ", rank)
+    np.random.seed(rank) # if you're using numpy
+    torch.manual_seed(rank)
+    torch.cuda.manual_seed_all(rank)
+    torch.use_deterministic_algorithms(True)
+    torch.utils.deterministic.fill_uninitialized_memory = True
+    random.seed(rank)
+    
     if args.n_gpus > 1:
         print("RANK :", rank)
         if rank is not None: 
@@ -101,6 +134,7 @@ if __name__ == "__main__":
             print("LOCAL RANK : ", rank)
             print("WORLD SIZE : ", world_size)
 
+    args.run_id = args.run_id + str(rank)
     if args.auto_resume and not args.run_id:
         raise ValueError("When passing auto-resume, please add a valid run-id")
     if not args.run_id:
@@ -149,27 +183,25 @@ if __name__ == "__main__":
         return {
             "optimizer": optim,
             "lr_scheduler": ReduceLROnPlateau(
-                optim, mode=mode, patience=config.train.scheduler.patience
+               optim, mode=mode, patience=config.train.scheduler.patience
             ),
-            "monitor": monitor,
+             "monitor": monitor,
         }
 
-    
-
-    if args.all_weights:
-        # model.train()
-        for param in model.parameters():
-            param.requires_grad = True
-        for module in model.modules():
-            module.train()
-
-    if args.freeze_encoder:
-        for p in model.wav2vec2.feature_extractor.parameters():
-            p.requires_grad = False
-        model.wav2vec2.feature_extractor.eval()
         
     model.configure_optimizers = MethodType(configure_optimizers, model)
-        
+    
+    # Somewhere not syncing good params
+    if config.model.name == "surgical_hubert_hydra":
+        if not config.train.freeze_encoder :
+            for p in model.wav2vec2.encoder.parameters():
+                p.requires_grad = True
+    
+
+    get_parameter_table(model)
+
+
+    
     print("segmafile loading")
     if args.n_gpus > 1: 
         sfd = SegmaFileDataset.from_config(config,rank=rank,world_size=world_size)
@@ -194,12 +226,12 @@ if __name__ == "__main__":
         flush=True,
     )
 
-    if int(rank) == 0:
-        print("[log] - use WandbLogger")
-        logger = WandbLogger(
-            project=config.wandb.project,
-            name=config.wandb.name,
-            id=args.run_id.split("-")[-1],
+    #if int(rank) == 0:
+    print("[log] - use WandbLogger")
+    logger = WandbLogger(
+        project=config.wandb.project,
+        name=config.wandb.name,
+        id=args.run_id.split("-")[-1],
             log_model=False if config.wandb.offline else "all",
             tags=args.tags,
             offline=config.wandb.offline,
@@ -207,10 +239,10 @@ if __name__ == "__main__":
         )
         # Allow val_change maybe not best idea but needed it for some reason
         # TODO
-        logger.experiment.config.update(config, allow_val_change=True)
-        # save_path = save_path.with_stem(save_path.stem + f"-{logger.experiment.id}")
-    else:
-        logger=None
+    logger.experiment.config.update(config, allow_val_change=True)
+    save_path = save_path.with_stem(save_path.stem + f"-{logger.experiment.id}")
+    #else:
+    #     logger=None
     model_checkpoint = ModelCheckpoint(
         monitor=monitor,
         mode=mode,

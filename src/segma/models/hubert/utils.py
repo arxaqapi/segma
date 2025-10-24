@@ -5,6 +5,7 @@ import torchaudio
 from torch.nn import Module
 from torchaudio.models import hubert_pretrain_base
 
+
 def load_hubert(path: Path | str):
     path = Path(path)
 

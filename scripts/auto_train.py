@@ -1,5 +1,4 @@
 import argparse
-import os
 from datetime import datetime
 from pathlib import Path
 from types import MethodType
@@ -107,10 +106,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("--run-id", "--id", type=str, help="ID of the run")
 
-    
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     args, extra_args = parser.parse_known_args()
-    
+
     if args.auto_resume and not args.run_id:
         raise ValueError("When passing auto-resume, please add a valid run-id")
     if not args.run_id:
@@ -157,28 +154,24 @@ if __name__ == "__main__":
         return {
             "optimizer": optim,
             "lr_scheduler": ReduceLROnPlateau(
-               optim, mode=mode, patience=config.train.scheduler.patience
+                optim, mode=mode, patience=config.train.scheduler.patience
             ),
-             "monitor": monitor,
+            "monitor": monitor,
         }
 
-        
     model.configure_optimizers = MethodType(configure_optimizers, model)
-    
+
     # Somewhere not syncing good params
     if config.model.name == "surgical_hubert_hydra":
-        if not config.train.freeze_encoder :
+        if not config.train.freeze_encoder:
             for p in model.wav2vec2.encoder.parameters():
                 p.requires_grad = True
-    
 
     get_parameter_table(model)
 
-
-    
     print("segmafile loading")
     sfd = SegmaFileDataset.from_config(config)
-    
+
     sfd.load(use_cache=False)
 
     print(
@@ -202,17 +195,16 @@ if __name__ == "__main__":
         project=config.wandb.project,
         name=config.wandb.name,
         id=args.run_id.split("-")[-1],
-            log_model=False if config.wandb.offline else "all",
-            tags=args.tags,
-            offline=config.wandb.offline,
-            resume="must" if args.auto_resume and last_ckpt.exists() else None,  # "never",
-        )
-        # Allow val_change maybe not best idea but needed it for some reason
-        # TODO
+        log_model=False if config.wandb.offline else "all",
+        tags=args.tags,
+        offline=config.wandb.offline,
+        resume="must" if args.auto_resume and last_ckpt.exists() else None,  # "never",
+    )
+    # Allow val_change maybe not best idea but needed it for some reason
+    # TODO
     logger.experiment.config.update(config, allow_val_change=True)
     save_path = save_path.with_stem(save_path.stem + f"-{logger.experiment.id}")
-    #else:
-    #     logger=None
+
     model_checkpoint = ModelCheckpoint(
         monitor=monitor,
         mode=mode,
@@ -250,7 +242,6 @@ if __name__ == "__main__":
 
     # https://pytorch.org/docs/main/torch.compiler_troubleshooting.html#dealing-with-recompilations
     # https://docs.google.com/document/d/1y5CRfMLdwEoF1nTk9q8qEu1mgMUuUtvhklPKJ2emLU8/edit?tab=t.0#heading=h.t130sdb4rshr
-    #if config.model.name in ("hydra_whisper", "HydraWhisper"):
     torch._dynamo.config.accumulated_cache_size_limit = 32
     if hasattr(torch._dynamo.config, "cache_size_limit"):
         torch._dynamo.config.cache_size_limit = 32

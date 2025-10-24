@@ -2,8 +2,8 @@ import argparse
 from pathlib import Path
 
 import torch
-from tqdm import tqdm
 import yaml
+from tqdm import tqdm
 
 from segma.config import Config, load_config
 from segma.models import Models
@@ -88,7 +88,9 @@ if __name__ == "__main__":
         model = torch.compile(model)
 
     # NOTE if args.uris: path is known
-    with open("/store/scratch/tcharlot/data/babytrain/archive_babytrain.tar","rb") as archive_path:
+    with open(
+        "/store/scratch/tcharlot/data/babytrain/archive_babytrain.tar", "rb"
+    ) as archive_path:
         if args.uris:
             with Path(args.uris).open("r") as uri_f:
                 uris = [uri.strip() for uri in uri_f.readlines()]
@@ -102,7 +104,7 @@ if __name__ == "__main__":
                     config=cfg,
                     save_logits=args.save_logits,
                     thresholds=threshold_dict,
-                    archive_path=archive_path
+                    archive_path=archive_path,
                 )
         else:
             for wav_f in tqdm(args.wavs.glob("*.wav")):
@@ -114,7 +116,7 @@ if __name__ == "__main__":
                     config=cfg,
                     save_logits=args.save_logits,
                     thresholds=threshold_dict,
-                    archive_path=archive_path
+                    archive_path=archive_path,
                 )
 
     # NOTE - symlink to models/last/[rttm|aa]

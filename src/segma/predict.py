@@ -205,8 +205,10 @@ def sliding_prediction(
 
         # NOTE - load only necessary portion of the audio
         audio_t, _sr = torchaudio.load(
-                        audio_path.resolve(), frame_offset=start_i, num_frames=end_i - start_i
-            #read_from_archive(row["path"], row["byte_offset"], row["byte_size"] , archive_path), frame_offset=start_i, num_frames=end_i - start_i
+            audio_path.resolve(),
+            frame_offset=start_i,
+            num_frames=end_i - start_i,
+            # read_from_archive(row["path"], row["byte_offset"], row["byte_size"] , archive_path), frame_offset=start_i, num_frames=end_i - start_i
         )
         # NOTE - if last meta_batch, look if padding necessary
         # TODO - improve padding mechanism

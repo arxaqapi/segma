@@ -1,15 +1,6 @@
-#wav_encoder : /store/scratch/tcharlot/checkpoints/250722-114435-spare-doree/checkpoints/epoch=32-val_loss=0.580.ckpt
-#wav_encoder : /scratch2/tcharlot/models/hubert_iter2_B175/checkpoints_longforms_hubert_pretrain_base/epoch=45-step=400000.ckpt
-#wav_encoder: /store/scratch/tcharlot/models/exp_iter3_B175/checkpoints_longforms_hubert_pretrain_base/epoch=44-step=400000.ckpt
 wav_encoder : hubert_base
-#wav_encoder : /store/scratch/tcharlot/models/exp_iter2_B175_2M/checkpoints_longforms_hubert_pretrain_base/epoch=57-step=515522.ckpt
+
 encoder_layers: []
 reduction: weighted
-
-lstm:
-  hidden_size: 128
-  num_layers: 2
-  bidirectional: true
-  dropout: 0.5
 
 classifier: 256

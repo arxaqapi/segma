@@ -5,29 +5,15 @@ wandb:
 
 data:
 
-  #dataset_path: /home/tcharlot/coml/data/baby_train
   dataset_path: /store/scratch/tkunze/data/baby_train
   classes: 
-    # - key_child
-    # - other_child
-    # - male
-    # - female
     - KCHI
     - OCH
     - MAL
     - FEM
-    # - SPEECH
-  #dataset_path: /store/scratch/tcharlot/data/speech-maturity
-  #classes:
-  #- Laughing
-  #- Canonical
-  #- Non-Canonical
-  #- Junk
-  #- Crying 
 
 # necessary info for pred/eval
 audio:
-  #chunk_duration_s: 0.575
   chunk_duration_s: 4
   sample_rate: 16_000
   # True if pyannet, False if Whisper
@@ -38,11 +24,9 @@ model:
   #chkp_path : /home/tcharlot/coml/checkpoints
 
 train:
-#  lr: 0.000142
   lr: 0.00001
   batch_size: 128
   max_epochs: 100
-  # validation_metric: auroc
   validation_metric: loss
   # [loss, partial_loss, label_loss, f1_score, auroc, roc]
   # [loss (includes label_loss), f1_score]
@@ -55,4 +39,3 @@ train:
 
   scheduler:
     patience: 3
-  lstm: false 

@@ -18,38 +18,30 @@ class SurgicalHydraHubert(BaseSegmentationModel):
         label_encoder: LabelEncoder,
         config: Config,
         weight_loss: bool = False,
-        loss_f: str = "bce",
-        train: bool = True
+        train: bool = True,
     ) -> None:
         super().__init__(label_encoder, config, weight_loss)
         if not isinstance(label_encoder, MultiLabelEncoder):
             raise ValueError("Only MultiLabelEncoder is accepted for HydraWavLM.")
+        self.config = config
 
         if train:
             self.wav2vec2 = load_hubert(self.config.model.config.wav_encoder)
         else:
             from torchaudio.models import hubert_pretrain_base
+
             model = hubert_pretrain_base(num_classes=500)
             self.wav2vec2 = model.wav2vec2
 
-        if config.train.freeze_encoder:
-            print("freeze encoder")
+        # NOTE - freeze CNN encoder
+        for p in self.wav2vec2.feature_extractor.parameters():
+            p.requires_grad = False
+
+        # NOTE - freeze transformer encoder, opt.
+        if config.model.config.freeze_encoder:
             for p in self.wav2vec2.parameters():
                 p.requires_grad = False
-            for p in self.encoder.parameters():
-                p.requires_grad = False
-        else : 
-            print("Encoder all weights")
-            for p in self.wav2vec2.encoder.parameters():
-                p.requires_grad = True
-            print("freeze CNNs")
-            for p in self.encoder.parameters():
-                p.requires_grad = False
-            if config.train.freeze_extractor:
-                for p in self.wav2vec2.feature_extractor.parameters():
-                    p.requires_grad = False
-                    
-        self.config = config
+
         if (
             config.model.config.encoder_layers is None
             or len(config.model.config.encoder_layers) == 0
@@ -71,43 +63,18 @@ class SurgicalHydraHubert(BaseSegmentationModel):
                 "layer_weights",
                 torch.ones(len(self.enc_layers_to_use)) / len(self.enc_layers_to_use),
             )
-        elif not config.train.lstm: 
-            pass
         else:
             raise ValueError(
                 f"Should not happen, `{self.config.model.config.reduction=}` should be `average` or `weighted`"
             )
 
-        self.sequence_classifier = "speech-maturity" in config.data.dataset_path
-
-        if config.train.lstm :
-            # TODO bad habit dimension fixed
-            self.lstm_shared = nn.LSTM(
-                input_size=768,
-                **config.model.config.lstm.as_dict(),
-            )
-
-            lstm_out_features = (
-                self.lstm_shared.hidden_size * 2
-                if self.lstm_shared.bidirectional
-                else self.lstm_shared.hidden_size
-            )
-
-            # NOTE - define x heads, one per label
-            self.task_heads = nn.ModuleDict(
-                {
-                    f"linear_head_{label}": nn.Linear(lstm_out_features, 1)
-                    for label in label_encoder.base_labels
-                }
-            )
-        else:
-            self.dropout = nn.Dropout()
-            self.task_heads = nn.ModuleDict(
-                {
-                    f"linear_head_{label}": nn.Linear(in_features=768, out_features=1)
-                    for label in label_encoder.base_labels
-                }
-            )
+        self.dropout = nn.Dropout()
+        self.task_heads = nn.ModuleDict(
+            {
+                f"linear_head_{label}": nn.Linear(in_features=768, out_features=1)
+                for label in label_encoder.base_labels
+            }
+        )
 
         self.conv_settings = ConvolutionSettings(
             kernels=(10, 3, 3, 3, 3, 2, 2),
@@ -115,68 +82,36 @@ class SurgicalHydraHubert(BaseSegmentationModel):
             paddings=(0, 0, 0, 0, 0, 0, 0),
         )
 
-        # NOTE - copied from whisper/hydra.py
-
     def forward(self, x: torch.Tensor):
-        # TODO
-       
-
         with torch.no_grad():
             x, lengths = self.wav2vec2.feature_extractor(x, None)
         if self.config.train.freeze_encoder:
             with torch.no_grad():
-                hidden_states = self.wav2vec2.encoder.extract_features(x, lengths, num_layers=None)
+                hidden_states = self.wav2vec2.encoder.extract_features(
+                    x, lengths, num_layers=None
+                )
         else:
-            hidden_states = self.wav2vec2.encoder.extract_features(x, lengths, num_layers=None)
-        if self.config.train.lstm :
-            hidden_states_t = torch.stack(
-                [hidden_states[i] for i in self.enc_layers_to_use], dim=0
+            hidden_states = self.wav2vec2.encoder.extract_features(
+                x, lengths, num_layers=None
             )
 
-            # NOTE - handle weighted encoder output
-            if self.config.model.config.reduction == "weighted":
-                weights = torch.nn.functional.softmax(self.layer_weights, dim=0)
-            else:
-                # uniform weights for simple average
-                weights = self.layer_weights
-
-            weighted_t = torch.einsum(
-                "l,l...->...",
-                weights,
-                hidden_states_t,
-            )
-
-            x, _ = self.lstm_shared(weighted_t)
-
-        else:
-            x = self.dropout(hidden_states[-1])
-        
+        x = self.dropout(hidden_states[-1])
         return {
-                name: head(x)
-                # NOTE - sigmoid is added in BCEWithLogitsLoss, return only logits
-                # name: nn.functional.sigmoid(head(lstm_out))
-                for name, head in self.task_heads.items()
-            } 
+            name: head(x)
+            # NOTE - sigmoid is added in BCEWithLogitsLoss, return only logits
+            for name, head in self.task_heads.items()
+        }
 
     def training_step(self, batch, batch_idx):
         x = batch["x"]
         y_target = batch["y"]
         y_pred_heads = self.forward(x)
-        # 'linear_head_male', 'linear_head_female',
-        # 'linear_head_key_child', 'linear_head_other_child'
-        # batch and windows merged, maybe not because no window
+
         # reduce first 2 dimensions (batch and windows can be merged)
         n_labels = len(self.label_encoder.labels)
-        # (batch * n_windows, 4)
-        y_target = y_target.view(-1, n_labels)  # .repeat_interleave(28)
+        y_target = y_target.view(-1, n_labels)
         # (batch * n_windows) - flattened, usefull when slicing target vector at the end
         y_preds = {k: y_pred.view(-1) for k, y_pred in y_pred_heads.items()}
-
-
-        #if self.global_step % 10 == 0:
-        #    print(self.global_step,[ (k,torch.mean(torch.sigmoid(h)).item(), torch.var(torch.sigmoid(h)).item(), torch.mean(torch.sigmoid(h[y_target[...,i] == 1])).item()) for i,(k,h) in enumerate(y_preds.items())])
-
-
 
         # FIXME - y_target should be one value per label
         head_losses = {
@@ -185,7 +120,7 @@ class SurgicalHydraHubert(BaseSegmentationModel):
             )
             for i, (k, y_pred) in enumerate(y_preds.items())
         }
-        # average pooling 28 x N
+
         loss = torch.stack(list(head_losses.values())).sum()
         self.log(
             "train/loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
@@ -197,24 +132,19 @@ class SurgicalHydraHubert(BaseSegmentationModel):
                 on_step=True,
                 on_epoch=True,
                 prog_bar=False,
-                logger=True
+                logger=True,
             )
         return loss
 
     def validation_step(self, batch, batch_idx):
         x = batch["x"]
         y_target = batch["y"]
-        # repeat labels for vtc like prediction
-        # y_target = y_target.repeat(1,28,1)
         y_pred_heads = self.forward(x)
-        # add sigmoid here
-
-        # 'linear_head_male', 'linear_head_female', 'linear_head_key_child', 'linear_head_other_child'
 
         # reduce first 2 dimensions (batch and windows can be merged)
         n_labels = len(self.label_encoder.labels)
-        # (batch * n_windows, 4)
-        y_target = y_target.view(-1, n_labels)  # .repeat_interleave(28)
+
+        y_target = y_target.view(-1, n_labels)
         # (batch * n_windows) - flattened, usefull when slicing target vector at the end
         y_preds = {k: y_pred.view(-1) for k, y_pred in y_pred_heads.items()}
         # NOTE - loss computation
@@ -236,7 +166,7 @@ class SurgicalHydraHubert(BaseSegmentationModel):
                 on_step=True,
                 on_epoch=True,
                 prog_bar=True,
-                logger=True
+                logger=True,
             )
             for head_name, head_loss in head_losses.items():
                 self.log(
@@ -245,7 +175,7 @@ class SurgicalHydraHubert(BaseSegmentationModel):
                     on_step=True,
                     on_epoch=True,
                     prog_bar=False,
-                    logger=True
+                    logger=True,
                 )
 
         # NOTE - f1 score
@@ -268,8 +198,7 @@ class SurgicalHydraHubert(BaseSegmentationModel):
                     on_step=True,
                     on_epoch=True,
                     prog_bar=True,
-                    logger=True
-
+                    logger=True,
                 )
             # TODO - total f1_score using a merger of TP/FP ...
 

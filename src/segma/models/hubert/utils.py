@@ -1,9 +1,10 @@
 from pathlib import Path
+
 import torch
-from torch.nn import Module
-from transformers.models.wavlm.modeling_wavlm import WavLMModel
 import torchaudio
+from torch.nn import Module
 from torchaudio.models import hubert_pretrain_base
+from transformers.models.wavlm.modeling_wavlm import WavLMModel
 
 
 def load_wavlm(path: Path | str):
@@ -18,7 +19,6 @@ def load_wavlm(path: Path | str):
 def load_hubert(path: Path | str):
     path = Path(path)
 
-    # TODO bad habitude to load with num_clusters fixed
     model = hubert_pretrain_base(num_classes=500)
     if path.exists():
         model = _load_state(model, path)
@@ -27,11 +27,7 @@ def load_hubert(path: Path | str):
         wav2vec2 = bundle.get_model()
         model.wav2vec2 = wav2vec2
 
-    for module in model.modules():
-        module.train()
-    for param in model.parameters():
-        param.requires_grad = True
-    return model.wav2vec2, model
+    return model.wav2vec2
 
 
 def _load_state(model: Module, checkpoint_path: Path, device="cpu") -> Module:

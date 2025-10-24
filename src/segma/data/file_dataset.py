@@ -72,8 +72,6 @@ class SegmaFileDataset:
         classes: list[str],
         chunk_duration_s: float,
         sample_rate: int = 16_000,
-        rank: int | None = None,
-        world_size: int | None = None,
     ) -> None:
         self.base_p = Path(base_p)
         if not self.base_p.exists():
@@ -83,12 +81,6 @@ class SegmaFileDataset:
         self.classes = classes
         self.chunk_duration_s = chunk_duration_s
         self.sample_rate = sample_rate
-        if (rank is not None) and (world_size is not None):
-            self.dist = True
-            self.rank = rank
-            self.world_size = world_size
-        else:
-            self.dist = False
 
         self.removed_uris: dict[
             Literal[
@@ -107,14 +99,12 @@ class SegmaFileDataset:
         self.subds_to_interlaps: None | dict[str, list[InterLap]] = None
 
     @classmethod
-    def from_config(cls, config: Config, rank=None, world_size=None) -> Self:
+    def from_config(cls, config: Config) -> Self:
         return cls(
             config.data.dataset_path,
             config.data.classes,
             config.audio.chunk_duration_s,
             config.audio.sample_rate,
-            rank,
-            world_size,
         )
 
     def check_for_data_leakage(self, subset_to_uris: dict[str, list[str]]) -> None:
@@ -159,12 +149,6 @@ class SegmaFileDataset:
                 for subset, uris in subset_to_uris.items()
             }
             self.removed_uris["exclude.txt"] = uris_to_remove
-        if self.dist:
-            total_size = len(subset_to_uris["train"])
-            print(self.rank, total_size, self.world_size)
-            subset_to_uris["train"] = subset_to_uris["train"][
-                self.rank : total_size : self.world_size
-            ]
 
         self.check_for_data_leakage(subset_to_uris)
         return subset_to_uris

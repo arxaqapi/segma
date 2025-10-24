@@ -159,7 +159,6 @@ def sliding_prediction(
     save_logits: bool = False,
     thresholds: dict[str, dict[str, float]] | None = None,
     batch_size: int = 128,
-    archive_path: str = None,
 ):
     """do not open audio entirely
     - perform slide-wise"""

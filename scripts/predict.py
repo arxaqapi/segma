@@ -88,36 +88,31 @@ if __name__ == "__main__":
         model = torch.compile(model)
 
     # NOTE if args.uris: path is known
-    with open(
-        "/store/scratch/tcharlot/data/babytrain/archive_babytrain.tar", "rb"
-    ) as archive_path:
-        if args.uris:
-            with Path(args.uris).open("r") as uri_f:
-                uris = [uri.strip() for uri in uri_f.readlines()]
-            for uri in tqdm(uris):
-                wav_f = (args.wavs / uri).with_suffix(".wav")
-                print(f"[log] - running inference for file: '{wav_f.stem}'")
-                sliding_prediction(
-                    wav_f,
-                    model=model,
-                    output_p=args.output,
-                    config=cfg,
-                    save_logits=args.save_logits,
-                    thresholds=threshold_dict,
-                    archive_path=archive_path,
-                )
-        else:
-            for wav_f in tqdm(args.wavs.glob("*.wav")):
-                print(f"[log] - running inference for file: '{wav_f.stem}'")
-                sliding_prediction(
-                    wav_f,
-                    model=model,
-                    output_p=args.output,
-                    config=cfg,
-                    save_logits=args.save_logits,
-                    thresholds=threshold_dict,
-                    archive_path=archive_path,
-                )
+    if args.uris:
+        with Path(args.uris).open("r") as uri_f:
+            uris = [uri.strip() for uri in uri_f.readlines()]
+        for uri in tqdm(uris):
+            wav_f = (args.wavs / uri).with_suffix(".wav")
+            print(f"[log] - running inference for file: '{wav_f.stem}'")
+            sliding_prediction(
+                wav_f,
+                model=model,
+                output_p=args.output,
+                config=cfg,
+                save_logits=args.save_logits,
+                thresholds=threshold_dict,
+            )
+    else:
+        for wav_f in tqdm(args.wavs.glob("*.wav")):
+            print(f"[log] - running inference for file: '{wav_f.stem}'")
+            sliding_prediction(
+                wav_f,
+                model=model,
+                output_p=args.output,
+                config=cfg,
+                save_logits=args.save_logits,
+                thresholds=threshold_dict,
+            )
 
     # NOTE - symlink to models/last/[rttm|aa]
     static_p = Path("models/last")

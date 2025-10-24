@@ -107,26 +107,10 @@ if __name__ == "__main__":
     )
     parser.add_argument("--run-id", "--id", type=str, help="ID of the run")
 
-    parser.add_argument("--n-gpus", type=int,default=1)
     
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     args, extra_args = parser.parse_known_args()
     
-    #set seed per rank
-    if "SLURM_ARRAY_TASK_ID" in os.environ:
-        rank = int(os.environ["SLURM_ARRAY_TASK_ID"])
-    else :
-        rank = 0
-    print("rank : ", rank)
-    
-    if args.n_gpus > 1:
-        print("RANK :", rank)
-        if rank is not None: 
-            world_size = args.n_gpus
-            print("LOCAL RANK : ", rank)
-            print("WORLD SIZE : ", world_size)
-
-    args.run_id = args.run_id + str(rank)
     if args.auto_resume and not args.run_id:
         raise ValueError("When passing auto-resume, please add a valid run-id")
     if not args.run_id:
@@ -193,10 +177,7 @@ if __name__ == "__main__":
 
     
     print("segmafile loading")
-    if args.n_gpus > 1: 
-        sfd = SegmaFileDataset.from_config(config,rank=rank,world_size=world_size)
-    else:
-        sfd = SegmaFileDataset.from_config(config)
+    sfd = SegmaFileDataset.from_config(config)
     
     sfd.load(use_cache=False)
 
@@ -216,7 +197,6 @@ if __name__ == "__main__":
         flush=True,
     )
 
-    #if int(rank) == 0:
     print("[log] - use WandbLogger")
     logger = WandbLogger(
         project=config.wandb.project,
@@ -253,38 +233,20 @@ if __name__ == "__main__":
     )
 
     # NOTE - from scratch training and resume
-    if args.n_gpus > 1:
-        trainer = pl.Trainer(
-            accelerator="gpu",
-            # devices=1,
-            devices=args.n_gpus,
-            strategy="ddp_find_unused_parameters_true",
-            max_epochs=config.train.max_epochs,
-            logger=logger,
-            callbacks=[
-                model_checkpoint,
-                early_stopping,
-                LearningRateMonitor(),
-                TQDMProgressBar(1000 if "debug" not in config.data.dataset_path else 1),
-            ],
-            # profiler="advanced"
-            profiler=config.train.profiler,
-        )
-    else:
-        trainer = pl.Trainer(
-            accelerator="gpu",
-            devices=1,
-            max_epochs=config.train.max_epochs,
-            logger=logger,
-            callbacks=[
-                model_checkpoint,
-                early_stopping,
-                LearningRateMonitor(),
-                TQDMProgressBar(1000 if "debug" not in config.data.dataset_path else 1),
-            ],
-            # profiler="advanced"
-            profiler=config.train.profiler,
-        )
+    trainer = pl.Trainer(
+        accelerator="gpu",
+        devices=1,
+        max_epochs=config.train.max_epochs,
+        logger=logger,
+        callbacks=[
+            model_checkpoint,
+            early_stopping,
+            LearningRateMonitor(),
+            TQDMProgressBar(1000 if "debug" not in config.data.dataset_path else 1),
+        ],
+        # profiler="advanced"
+        profiler=config.train.profiler,
+    )
 
     # https://pytorch.org/docs/main/torch.compiler_troubleshooting.html#dealing-with-recompilations
     # https://docs.google.com/document/d/1y5CRfMLdwEoF1nTk9q8qEu1mgMUuUtvhklPKJ2emLU8/edit?tab=t.0#heading=h.t130sdb4rshr

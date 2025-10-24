@@ -9,16 +9,13 @@ if __name__ == "__main__":
         "-p",
         "--precision",
         choices=("fp8", "fp16", "fp32"),
-        default="fp16",
+        default="fp32",
         type=str,
         help="Choose the floating point precision of the model weights.",
     )
     parser.add_argument(
         "--model",
-        choices=(
-            "base",
-            "large",
-        ),
+        choices=("base", "large", "base-plus"),
         default="base",
         type=str,
         help="Select the model.",

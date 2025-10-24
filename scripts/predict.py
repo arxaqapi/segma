@@ -3,6 +3,7 @@ from pathlib import Path
 
 import torch
 import yaml
+from tqdm import tqdm
 
 from segma.config import Config, load_config
 from segma.models import Models
@@ -90,7 +91,7 @@ if __name__ == "__main__":
     if args.uris:
         with Path(args.uris).open("r") as uri_f:
             uris = [uri.strip() for uri in uri_f.readlines()]
-        for uri in uris:
+        for uri in tqdm(uris):
             wav_f = (args.wavs / uri).with_suffix(".wav")
             print(f"[log] - running inference for file: '{wav_f.stem}'")
             sliding_prediction(
@@ -102,7 +103,7 @@ if __name__ == "__main__":
                 thresholds=threshold_dict,
             )
     else:
-        for wav_f in args.wavs.glob("*.wav"):
+        for wav_f in tqdm(args.wavs.glob("*.wav")):
             print(f"[log] - running inference for file: '{wav_f.stem}'")
             sliding_prediction(
                 wav_f,

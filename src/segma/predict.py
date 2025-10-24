@@ -129,15 +129,15 @@ def interval_to_aa(intervals: Intervals, uri: str) -> list[AudioAnnotation]:
 
 
 def write_intervals(intervals: Intervals, audio_path: Path, output_p: Path):
-    rttm_out = output_p / "rttm"
-    aa_out = output_p / "aa"
+    rttm_out = output_p / "raw_rttm"
+    # aa_out = output_p / "aa"
     rttm_out.mkdir(exist_ok=True, parents=True)
-    aa_out.mkdir(exist_ok=True, parents=True)
+    # aa_out.mkdir(exist_ok=True, parents=True)
 
     uri = audio_path.stem
     with (
         (rttm_out / uri).with_suffix(".rttm").open("w") as rttm_f,
-        (aa_out / uri).with_suffix(".aa").open("w") as aa_f,
+        # (aa_out / uri).with_suffix(".aa").open("w") as aa_f,
     ):
         for start_f, end_f, label in intervals:
             aa = AudioAnnotation(
@@ -147,7 +147,7 @@ def write_intervals(intervals: Intervals, audio_path: Path, output_p: Path):
                 label=str(label),
             )
             rttm_f.write(aa.to_rttm() + "\n")
-            aa_f.write(aa.write() + "\n")
+            # aa_f.write(aa.write() + "\n")
 
 
 # TODO - add chunck_size_f as parameter of function
@@ -204,7 +204,10 @@ def sliding_prediction(
 
         # NOTE - load only necessary portion of the audio
         audio_t, _sr = torchaudio.load(
-            audio_path.resolve(), frame_offset=start_i, num_frames=end_i - start_i
+            audio_path.resolve(),
+            frame_offset=start_i,
+            num_frames=end_i - start_i,
+            # read_from_archive(row["path"], row["byte_offset"], row["byte_size"] , archive_path), frame_offset=start_i, num_frames=end_i - start_i
         )
         # NOTE - if last meta_batch, look if padding necessary
         # TODO - improve padding mechanism
@@ -224,7 +227,7 @@ def sliding_prediction(
         # (batch, windows, n_labels)
         batch_t = model.audio_preparation_hook(batch_t.cpu().numpy())
         # REVIEW need to check if it's appropriate
-        #batch_t = torch.clone(batch_t)
+        # batch_t = torch.clone(batch_t)
         batch_t = torch.from_numpy(batch_t)
 
         # NOTE - pass batch through model

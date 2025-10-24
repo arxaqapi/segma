@@ -141,24 +141,18 @@ class SurgicalHydraConfig(BaseConfig):
 
 
 @dataclass
-class HydraWavLMConfig(BaseConfig):
-    wav_encoder: str
-    lstm: LSTMConfig
-    classifier: int
-
-
-@dataclass
-class SurgicalHydraWavLMConfig(BaseConfig):
+class SurgicalHydraLightHuBERTConfig(BaseConfig):
     wav_encoder: str
     encoder_layers: list[int]
-    reduction: Literal["average", "weighted"]
-    lstm: LSTMConfig
+    reduction: str
     classifier: int
+    freeze_encoder: bool = False
 
 
 @dataclass
 class ModelConfig(BaseConfig):
     name: str
+    chkp_path: str | None
     # is initialized as None in first pass, then as the correct model class manually (sub-optimal)
     config: (
         None
@@ -169,8 +163,7 @@ class ModelConfig(BaseConfig):
         | SurgicalWhisperConfig
         | HydraWhisperConfig
         | SurgicalHydraConfig
-        | HydraWavLMConfig
-        | SurgicalHydraWavLMConfig
+        | SurgicalHydraLightHuBERTConfig
     )
 
 

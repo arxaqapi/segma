@@ -1,6 +1,6 @@
 wandb:
   offline: false
-  project: Segma debug
+  project:  hubert_longforms hydra surgical
   name: train
 
 data:
@@ -13,19 +13,19 @@ data:
 
 # necessary info for pred/eval
 audio:
-  chunk_duration_s: 4.0
+  chunk_duration_s: 4
   sample_rate: 16_000
   # True if pyannet, False if Whisper
   strict_frames: false
 
 model:
-  name: surgical_hydra
+  name: surgical_hubert_hydra
+  #chkp_path : /home/tcharlot/coml/checkpoints
 
 train:
-  lr: 0.001
-  batch_size: 32
+  lr: 0.00001
+  batch_size: 128
   max_epochs: 100
-  # validation_metric: auroc
   validation_metric: loss
   # [loss, partial_loss, label_loss, f1_score, auroc, roc]
   # [loss (includes label_loss), f1_score]

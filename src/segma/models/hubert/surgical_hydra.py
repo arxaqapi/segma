@@ -87,7 +87,7 @@ class SurgicalHydraHubert(BaseSegmentationModel):
     def forward(self, x: torch.Tensor):
         with torch.no_grad():
             x, lengths = self.wav2vec2.feature_extractor(x, None)
-        if self.config.train.freeze_encoder:
+        if self.config.model.config.freeze_encoder:
             with torch.no_grad():
                 hidden_states = self.wav2vec2.encoder.extract_features(
                     x, lengths, num_layers=None

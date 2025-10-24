@@ -209,8 +209,7 @@ class AudioSegmentationDataset(IterableDataset):
             audio_file_p.resolve(),
             frame_offset=start_f,
             num_frames=duration_f,
-            # TODO - fix this with ffmpeg
-            backend="soundfile",
+            backend="ffmpeg",
         )
         # Downmix to mono if necessary
         if audio_t.shape[0] > 1:

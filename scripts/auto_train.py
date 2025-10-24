@@ -163,7 +163,7 @@ if __name__ == "__main__":
 
     # Somewhere not syncing good params
     if config.model.name == "surgical_hubert_hydra":
-        if not config.train.freeze_encoder:
+        if not config.model.config.freeze_encoder:
             for p in model.wav2vec2.encoder.parameters():
                 p.requires_grad = True
 

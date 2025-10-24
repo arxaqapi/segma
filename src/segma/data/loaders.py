@@ -112,9 +112,6 @@ class AudioSegmentationDataset(IterableDataset):
         self.audio_preparation_hook = audio_preparation_hook
         self.classify_sequence = "speech-maturity" in config.data.dataset_path
 
-        #self.archive_descriptor = 
-
-
         self.windows = generate_frames(
             conv_settings=self.conv_settings,
             sample_rate=config.audio.sample_rate,
@@ -210,7 +207,11 @@ class AudioSegmentationDataset(IterableDataset):
                 f"Error in `AudioSegmentationDataset.load_audio()`: `{duration_f=}` does not match expected `{n_expected_frames}` frames."
             )
         audio_t, _sr = torchaudio.load(
-            audio_file_p.resolve(), frame_offset=start_f, num_frames=duration_f, backend="soundfile"
+            audio_file_p.resolve(),
+            frame_offset=start_f,
+            num_frames=duration_f,
+            # TODO - fix this with ffmpeg
+            backend="soundfile",
         )
         # Downmix to mono if necessary
         if audio_t.shape[0] > 1:

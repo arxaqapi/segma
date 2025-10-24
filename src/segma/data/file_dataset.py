@@ -7,6 +7,7 @@ from typing import Literal, Self
 import numpy as np
 import torchaudio
 from interlap import InterLap
+from tqdm import tqdm
 
 from segma.config import Config
 from segma.data.utils import (
@@ -18,7 +19,6 @@ from segma.data.utils import (
 )
 from segma.utils.conversions import frames_to_seconds
 
-from tqdm import tqdm
 
 class DatasetNotLoadedError(Exception): ...
 
@@ -73,7 +73,7 @@ class SegmaFileDataset:
         chunk_duration_s: float,
         sample_rate: int = 16_000,
         rank: int | None = None,
-        world_size : int | None = None
+        world_size: int | None = None,
     ) -> None:
         self.base_p = Path(base_p)
         if not self.base_p.exists():
@@ -87,7 +87,7 @@ class SegmaFileDataset:
             self.dist = True
             self.rank = rank
             self.world_size = world_size
-        else: 
+        else:
             self.dist = False
 
         self.removed_uris: dict[
@@ -114,7 +114,7 @@ class SegmaFileDataset:
             config.audio.chunk_duration_s,
             config.audio.sample_rate,
             rank,
-            world_size
+            world_size,
         )
 
     def check_for_data_leakage(self, subset_to_uris: dict[str, list[str]]) -> None:
@@ -162,7 +162,9 @@ class SegmaFileDataset:
         if self.dist:
             total_size = len(subset_to_uris["train"])
             print(self.rank, total_size, self.world_size)
-            subset_to_uris["train"] = subset_to_uris["train"][self.rank : total_size : self.world_size]
+            subset_to_uris["train"] = subset_to_uris["train"][
+                self.rank : total_size : self.world_size
+            ]
 
         self.check_for_data_leakage(subset_to_uris)
         return subset_to_uris

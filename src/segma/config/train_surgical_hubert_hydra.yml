@@ -4,8 +4,7 @@ wandb:
   name: train
 
 data:
-
-  dataset_path: /store/scratch/tkunze/data/baby_train
+  dataset_path: data/baby_train
   classes: 
     - KCHI
     - OCH

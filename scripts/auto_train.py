@@ -1,10 +1,10 @@
 import argparse
+import os
 from datetime import datetime
 from pathlib import Path
 from types import MethodType
 from typing import Literal
-import numpy as np
-import random
+
 import lightning as pl
 import torch
 import torch._dynamo.config
@@ -34,7 +34,6 @@ from segma.utils import set_seed
 from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
 from segma.utils.experiment import new_experiment_id
 
-import os
 
 def get_parameter_table(model: torch.nn.Module):
     m_length = max(len(name) for name, _ in model.named_parameters()) + 2
@@ -54,6 +53,7 @@ def get_parameter_table(model: torch.nn.Module):
 
     # TODO - add percent trainable
     print(total_params, total_trainable_params)
+
 
 def get_metric(metric: str) -> tuple[Literal["min", "max"], str]:
     match metric:
@@ -118,12 +118,6 @@ if __name__ == "__main__":
     else :
         rank = 0
     print("rank : ", rank)
-    np.random.seed(rank) # if you're using numpy
-    torch.manual_seed(rank)
-    torch.cuda.manual_seed_all(rank)
-    torch.use_deterministic_algorithms(True)
-    torch.utils.deterministic.fill_uninitialized_memory = True
-    random.seed(rank)
     
     if args.n_gpus > 1:
         print("RANK :", rank)

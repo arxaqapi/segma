@@ -110,7 +110,6 @@ class AudioSegmentationDataset(IterableDataset):
         self.conv_settings = conv_settings
         self.label_encoder = label_encoder
         self.audio_preparation_hook = audio_preparation_hook
-        self.classify_sequence = "speech-maturity" in config.data.dataset_path
 
         self.windows = generate_frames(
             conv_settings=self.conv_settings,

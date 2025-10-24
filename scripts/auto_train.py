@@ -21,12 +21,10 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from segma.config import Config, load_config
 from segma.data import SegmaFileDataset, SegmentationDataLoader
 from segma.models import (
-    HydraWavLM,
     HydraWhisper,
     Models,
     PyanNet,
     PyanNetSlim,
-    SurgicalHydraWavLM,
     SurgicalHydraHubert,
     SurgicalWhisper,
     Whisperidou,
@@ -171,8 +169,6 @@ if __name__ == "__main__":
         | PyanNetSlim
         | SurgicalWhisper
         | HydraWhisper
-        | HydraWavLM
-        | SurgicalHydraWavLM
         | SurgicalHydraHubert
     ) = Models[config.model.name](l_encoder, config)
 

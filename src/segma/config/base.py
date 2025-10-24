@@ -141,22 +141,6 @@ class SurgicalHydraConfig(BaseConfig):
 
 
 @dataclass
-class HydraWavLMConfig(BaseConfig):
-    wav_encoder: str
-    lstm: LSTMConfig
-    classifier: int
-
-
-@dataclass
-class SurgicalHydraWavLMConfig(BaseConfig):
-    wav_encoder: str
-    encoder_layers: list[int]
-    reduction: Literal["average", "weighted"]
-    lstm: LSTMConfig
-    classifier: int
-
-
-@dataclass
 class SurgicalHydraLightHuBERTConfig(BaseConfig):
     wav_encoder: str
     encoder_layers: list[int]
@@ -179,8 +163,6 @@ class ModelConfig(BaseConfig):
         | SurgicalWhisperConfig
         | HydraWhisperConfig
         | SurgicalHydraConfig
-        | HydraWavLMConfig
-        | SurgicalHydraWavLMConfig
         | SurgicalHydraLightHuBERTConfig
     )
 

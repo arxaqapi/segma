@@ -22,7 +22,9 @@ class SurgicalHydraHubert(BaseSegmentationModel):
     ) -> None:
         super().__init__(label_encoder, config, weight_loss)
         if not isinstance(label_encoder, MultiLabelEncoder):
-            raise ValueError("Only MultiLabelEncoder is accepted for HydraWavLM.")
+            raise ValueError(
+                "Only MultiLabelEncoder is accepted for SurgicalHydraHubert."
+            )
         self.config = config
 
         if train:

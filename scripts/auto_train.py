@@ -89,11 +89,6 @@ if __name__ == "__main__":
         help="Resume training, pass in checkpoint path.",
     )
     parser.add_argument(
-        "--all-weights",
-        action="store_true",
-        help="Finetune all weights of the model",
-    )
-    parser.add_argument(
         "--freeze-encoder",
         action="store_true",
         help="Finetune all weights of the model",
@@ -120,9 +115,6 @@ if __name__ == "__main__":
     experiment_path = Path(args.output)
     if not experiment_path.exists():
         experiment_path.mkdir()
-
-    if args.all_weights:
-        config.train.all_weights = True
 
     save_path = experiment_path / args.run_id
     save_path.mkdir(parents=True, exist_ok=True)

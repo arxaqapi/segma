@@ -54,7 +54,7 @@ def test_MultiLabelEncoder_one_hot():
     assert enc.one_hot(("bb", "cc")).tolist() == enc.one_hot(("cc", "bb")).tolist()
 
 
-def test_PowersetMultiLabelEncoder_i_to_one_hot():
+def test_MultiLabelEncoder_i_to_one_hot():
     labels = ("aa", "bb", "cc")
     enc = MultiLabelEncoder(labels=labels)
 

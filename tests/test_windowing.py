@@ -2,11 +2,11 @@ import numpy as np
 from interlap import InterLap
 
 from segma.data.loaders import windows_to_targets
-from segma.utils.encoders import PowersetMultiLabelEncoder
+from segma.utils.encoders import MultiLabelEncoder
 
 
 def test_windows_to_target():
-    l_enc = PowersetMultiLabelEncoder(("child", "female", "male"))
+    l_enc = MultiLabelEncoder(("child", "female", "male"))
 
     # generate windows
     wins = np.array(
@@ -27,7 +27,9 @@ def test_windows_to_target():
 
     targets = windows_to_targets(windows=wins, label_encoder=l_enc, labels=labels)
 
-    assert int(targets[4][0]) == 1
-    assert int(targets[5][0]) == 1
+    assert targets[0].tolist() == [1, 0, 1]
 
-    # test that for frames with no overlap (no class), the default class is returned
+    assert targets[4].tolist() == [0] * 3
+    assert targets[5].tolist() == [0] * 3
+
+    assert targets[-1].tolist() == [0, 1, 0]

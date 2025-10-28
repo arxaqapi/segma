@@ -30,7 +30,7 @@ from segma.models import (
     WhisperiMax,
 )
 from segma.utils import set_seed
-from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
+from segma.utils.encoders import MultiLabelEncoder
 from segma.utils.experiment import new_experiment_id
 
 
@@ -124,10 +124,9 @@ if __name__ == "__main__":
     chkp_path.mkdir(parents=True, exist_ok=True)
     last_ckpt = chkp_path / "last.ckpt"
 
-    if "hydra" in config.model.name:
-        l_encoder = MultiLabelEncoder(labels=config.data.classes)
-    else:
-        l_encoder = PowersetMultiLabelEncoder(labels=config.data.classes)
+    if "hydra" not in config.model.name:
+        raise ValueError("Only `MultiLabelEncoder` is supported")
+    l_encoder = MultiLabelEncoder(labels=config.data.classes)
 
     model: (
         Whisperidou

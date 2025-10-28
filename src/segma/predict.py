@@ -14,7 +14,6 @@ from segma.utils.conversions import frames_to_seconds
 from segma.utils.encoders import (
     LabelEncoder,
     MultiLabelEncoder,
-    PowersetMultiLabelEncoder,
 )
 
 
@@ -162,6 +161,9 @@ def sliding_prediction(
 ):
     """do not open audio entirely
     - perform slide-wise"""
+    if not isinstance(model.label_encoder, MultiLabelEncoder):
+        raise ValueError("Only `MultiLabelEncoder` is supported")
+
     model.eval()
     chunck_size_f = int(config.audio.chunk_duration_s) * config.audio.sample_rate
     meta_b_size = batch_size * chunck_size_f
@@ -237,68 +239,36 @@ def sliding_prediction(
                     torch.device("mps" if torch.backends.mps.is_available() else "cuda")
                 )
             )
-            if "hydra" in config.model.name:
-                for key, head_output_t in output_t.items():
-                    output_t[key] = torch.nn.functional.sigmoid(head_output_t)
+            for key, head_output_t in output_t.items():
+                output_t[key] = torch.nn.functional.sigmoid(head_output_t)
 
         # NOTE - only for MultiLabel models: x * (30, 99, 1)
         # TODO handle using label_encoder (thats its usecase)
-        if isinstance(model.label_encoder, MultiLabelEncoder):
-            # NOTE - one pass per label
-            # mb_logits: dict[tuple[int, int], list[float]] = defaultdict(list)
-            for key, head_output_t in output_t.items():
-                head_label = key.removeprefix("linear_head_")
-                for batch_i, batch in enumerate(head_output_t):
-                    if thresholds is not None:
-                        # NOTE - thresholds batch
-                        label_prediction = (
-                            (batch >= thresholds[head_label]["lower_bound"])
-                            & (batch <= thresholds[head_label]["upper_bound"])
-                        ).int()
-                    else:
-                        # NOTE - use base value of 0.5 for tresholding
-                        label_prediction = (batch > 0.5).int()
-                    for pred, raw_logit, (w_start, w_end) in zip(
-                        label_prediction, batch, reference_windows
-                    ):
-                        offset = start_i + batch_i * chunck_size_f
-                        frame_start = w_start + offset
-                        # FIXME - Intervals needs to be fixed
-                        frame_end = w_end + offset + 1
-                        # NOTE - skip padded section
-                        if n_frames_to_pad > 0 and frame_start > (
-                            end_i - n_frames_to_pad
-                        ):
-                            break
-                        found_labels = [] if pred == 0 else [head_label]
-                        for label in found_labels:
-                            corresponding_interval: Interval = (
-                                frame_start,
-                                frame_end,
-                                label,
-                            )
-                            all_intervals.add(corresponding_interval)
-                        # NOTE - handle logits saving
-                        if save_logits:
-                            raw_logits[(frame_start, frame_end)].append(
-                                raw_logit.detach().cpu().numpy().item()
-                            )
-
-        elif isinstance(model.label_encoder, PowersetMultiLabelEncoder):
-            # NOTE - using windows of size 20ms in model output
-            for batch_i, batch in enumerate(output_t):
-                # batch: (windows, n_labels)
-                predictions = batch.argmax(-1)
-                for pred, (w_start, w_end) in zip(predictions, reference_windows):
+        # NOTE - one pass per label
+        # mb_logits: dict[tuple[int, int], list[float]] = defaultdict(list)
+        for key, head_output_t in output_t.items():
+            head_label = key.removeprefix("linear_head_")
+            for batch_i, batch in enumerate(head_output_t):
+                if thresholds is not None:
+                    # NOTE - thresholds batch
+                    label_prediction = (
+                        (batch >= thresholds[head_label]["lower_bound"])
+                        & (batch <= thresholds[head_label]["upper_bound"])
+                    ).int()
+                else:
+                    # NOTE - use base value of 0.5 for tresholding
+                    label_prediction = (batch > 0.5).int()
+                for pred, raw_logit, (w_start, w_end) in zip(
+                    label_prediction, batch, reference_windows
+                ):
                     offset = start_i + batch_i * chunck_size_f
                     frame_start = w_start + offset
-                    # FIXME - Intervals needs to be fixed instead of forcing the merge with a + 1
+                    # FIXME - Intervals needs to be fixed
                     frame_end = w_end + offset + 1
                     # NOTE - skip padded section
                     if n_frames_to_pad > 0 and frame_start > (end_i - n_frames_to_pad):
                         break
-
-                    found_labels = model.label_encoder.inv_transform(pred.item())
+                    found_labels = [] if pred == 0 else [head_label]
                     for label in found_labels:
                         corresponding_interval: Interval = (
                             frame_start,
@@ -306,6 +276,11 @@ def sliding_prediction(
                             label,
                         )
                         all_intervals.add(corresponding_interval)
+                    # NOTE - handle logits saving
+                    if save_logits:
+                        raw_logits[(frame_start, frame_end)].append(
+                            raw_logit.detach().cpu().numpy().item()
+                        )
 
     # NOTE - generate & write; aa & rttms
     write_intervals(intervals=all_intervals, audio_path=audio_path, output_p=output_p)

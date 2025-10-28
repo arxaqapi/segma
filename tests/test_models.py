@@ -61,11 +61,10 @@ def test_WavLM_based_forward():
 
     for model_name, model_c in Models.items():
         if "wavlm" in model_name:
-            label_encoder = (
-                MultiLabelEncoder(labels)
-                if "hydra" in model_name
-                else PowersetMultiLabelEncoder(labels)
-            )
+            if "hydra" not in model_name:
+                raise ValueError("Only `MultiLabelEncoder` is supported")
+            label_encoder = MultiLabelEncoder(labels)
+
             cfg: Config = load_config(
                 config_path=f"tests/sample/temp_config_{model_name}.yml",
             )

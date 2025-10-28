@@ -22,8 +22,6 @@ from segma.data import SegmaFileDataset, SegmentationDataLoader
 from segma.models import (
     HydraWhisper,
     Models,
-    PyanNet,
-    PyanNetSlim,
     SurgicalHydraHubert,
     SurgicalWhisper,
     Whisperidou,
@@ -129,13 +127,7 @@ if __name__ == "__main__":
     l_encoder = MultiLabelEncoder(labels=config.data.classes)
 
     model: (
-        Whisperidou
-        | WhisperiMax
-        | PyanNet
-        | PyanNetSlim
-        | SurgicalWhisper
-        | HydraWhisper
-        | SurgicalHydraHubert
+        Whisperidou | WhisperiMax | SurgicalWhisper | HydraWhisper | SurgicalHydraHubert
     ) = Models[config.model.name](l_encoder, config)
 
     mode, monitor = get_metric(config.train.validation_metric)

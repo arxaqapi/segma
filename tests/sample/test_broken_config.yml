@@ -10,7 +10,6 @@ data:
     - OCH
     - MAL
     - FEM
-    # - SPEECH
 
 # necessary info for pred/eval
 audio:

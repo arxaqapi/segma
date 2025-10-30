@@ -13,7 +13,6 @@ from segma.config import load_config
 from segma.utils.encoders import (
     LabelEncoder,
     MultiLabelEncoder,
-    PowersetMultiLabelEncoder,
 )
 
 
@@ -118,11 +117,13 @@ if __name__ == "__main__":
     args.pred = Path(args.pred)
     cfg = load_config(args.config)
 
+    if "hydra" not in cfg.model.name:
+        raise ValueError("Only `MultiLabelEncoder` is supported")
+    label_encoder = MultiLabelEncoder(labels=cfg.data.classes)
+
     eval_model_output(
         rttm_true_p=args.gt,
         rttm_pred_p=args.pred,
-        label_encoder=MultiLabelEncoder(labels=cfg.data.classes)
-        if "hydra" in cfg.model.name
-        else PowersetMultiLabelEncoder(labels=cfg.data.classes),
+        label_encoder=label_encoder,
         scores_output=args.pred.parent / "fscore.csv",
     )

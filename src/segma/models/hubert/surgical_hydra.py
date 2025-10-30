@@ -3,37 +3,54 @@ from typing import Any, Mapping
 import torch
 import torch.nn as nn
 from torchmetrics.functional.classification import binary_f1_score
-from transformers.modeling_outputs import BaseModelOutput
 
 from segma.config.base import Config
 from segma.models.base import BaseSegmentationModel, ConvolutionSettings
 from segma.utils.encoders import LabelEncoder, MultiLabelEncoder
 
-from .utils import load_wavlm
+from .utils import load_hubert
 
 
 # NOTE - Heavily copied from whisper/hydra.py
-class SurgicalHydraWavLM(BaseSegmentationModel):
+class SurgicalHydraHubert(BaseSegmentationModel):
     def __init__(
         self,
         label_encoder: LabelEncoder,
         config: Config,
         weight_loss: bool = False,
-        loss_f: str = "bce",
+        train: bool = True,
     ) -> None:
         super().__init__(label_encoder, config, weight_loss)
         if not isinstance(label_encoder, MultiLabelEncoder):
-            raise ValueError("Only MultiLabelEncoder is accepted for HydraWavLM.")
+            raise ValueError(
+                "Only MultiLabelEncoder is accepted for SurgicalHydraHubert."
+            )
+        self.config = config
 
-        self.feature_extractor, self.encoder = load_wavlm(
-            self.config.model.config.wav_encoder
-        )
+        if train:
+            self.wav2vec2 = load_hubert(self.config.model.config.wav_encoder)
+        else:
+            from torchaudio.models import hubert_pretrain_base
+
+            model = hubert_pretrain_base(num_classes=500)
+            self.wav2vec2 = model.wav2vec2
+
+        # NOTE - freeze CNN encoder
+        for p in self.wav2vec2.feature_extractor.parameters():
+            p.requires_grad = False
+
+        # NOTE - freeze transformer encoder, opt.
+        if config.model.config.freeze_encoder:
+            for p in self.wav2vec2.parameters():
+                p.requires_grad = False
 
         if (
             config.model.config.encoder_layers is None
             or len(config.model.config.encoder_layers) == 0
         ):
-            self.enc_layers_to_use = list(range(self.encoder.config.num_hidden_layers))
+            self.enc_layers_to_use = list(
+                range(len(self.wav2vec2.encoder.transformer.layers))
+            )
         else:
             self.enc_layers_to_use = sorted(
                 [i - 1 for i in config.model.config.encoder_layers]
@@ -53,21 +70,10 @@ class SurgicalHydraWavLM(BaseSegmentationModel):
                 f"Should not happen, `{self.config.model.config.reduction=}` should be `average` or `weighted`"
             )
 
-        self.lstm_shared = nn.LSTM(
-            input_size=self.encoder.config.output_hidden_size,
-            **config.model.config.lstm.as_dict(),
-        )
-
-        lstm_out_features = (
-            self.lstm_shared.hidden_size * 2
-            if self.lstm_shared.bidirectional
-            else self.lstm_shared.hidden_size
-        )
-
-        # NOTE - define x heads, one per label
+        self.dropout = nn.Dropout()
         self.task_heads = nn.ModuleDict(
             {
-                f"linear_head_{label}": nn.Linear(lstm_out_features, 1)
+                f"linear_head_{label}": nn.Linear(in_features=768, out_features=1)
                 for label in label_encoder.base_labels
             }
         )
@@ -78,47 +84,29 @@ class SurgicalHydraWavLM(BaseSegmentationModel):
             paddings=(0, 0, 0, 0, 0, 0, 0),
         )
 
-        # NOTE - copied from whisper/hydra.py
-
     def forward(self, x: torch.Tensor):
-        enc_x: BaseModelOutput = self.encoder(x, output_hidden_states=True)
-        hidden_states = enc_x.hidden_states[1:]
-        hidden_states_t = torch.stack(
-            [hidden_states[i] for i in self.enc_layers_to_use], dim=0
-        )
-
-        # NOTE - handle weighted encoder output
-        if self.config.model.config.reduction == "weighted":
-            weights = torch.nn.functional.softmax(self.layer_weights, dim=0)
+        with torch.no_grad():
+            x, lengths = self.wav2vec2.feature_extractor(x, None)
+        if self.config.model.config.freeze_encoder:
+            with torch.no_grad():
+                hidden_states = self.wav2vec2.encoder.extract_features(
+                    x, lengths, num_layers=None
+                )
         else:
-            # uniform weights for simple average
-            weights = self.layer_weights
+            hidden_states = self.wav2vec2.encoder.extract_features(
+                x, lengths, num_layers=None
+            )
 
-        weighted_t = torch.einsum(
-            "l,l...->...",
-            weights,
-            hidden_states_t,
-        )
-
-        # (batch, 99, lstm.hidden_size)
-        lstm_out, _ = self.lstm_shared(weighted_t)
-        return {
-            name: head(lstm_out)
-            # NOTE - sigmoid is added in BCEWithLogitsLoss, return only logits
-            # name: nn.functional.sigmoid(head(lstm_out))
-            for name, head in self.task_heads.items()
-        }
+        x = self.dropout(hidden_states[-1])
+        return torch.stack([head(x) for head in self.task_heads.values()], dim=-1)
 
     def training_step(self, batch, batch_idx):
         x = batch["x"]
         y_target = batch["y"]
         y_pred_heads = self.forward(x)
-        # 'linear_head_male', 'linear_head_female',
-        # 'linear_head_key_child', 'linear_head_other_child'
 
         # reduce first 2 dimensions (batch and windows can be merged)
         n_labels = len(self.label_encoder.labels)
-        # (batch * n_windows, 4)
         y_target = y_target.view(-1, n_labels)
         # (batch * n_windows) - flattened, usefull when slicing target vector at the end
         y_preds = {k: y_pred.view(-1) for k, y_pred in y_pred_heads.items()}
@@ -150,15 +138,13 @@ class SurgicalHydraWavLM(BaseSegmentationModel):
         x = batch["x"]
         y_target = batch["y"]
         y_pred_heads = self.forward(x)
-        # 'linear_head_male', 'linear_head_female', 'linear_head_key_child', 'linear_head_other_child'
 
         # reduce first 2 dimensions (batch and windows can be merged)
         n_labels = len(self.label_encoder.labels)
-        # (batch * n_windows, 4)
+
         y_target = y_target.view(-1, n_labels)
         # (batch * n_windows) - flattened, usefull when slicing target vector at the end
         y_preds = {k: y_pred.view(-1) for k, y_pred in y_pred_heads.items()}
-
         # NOTE - loss computation
         if (
             self.config.train.validation_metric == "loss"

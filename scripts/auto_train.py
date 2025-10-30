@@ -22,15 +22,34 @@ from segma.data import SegmaFileDataset, SegmentationDataLoader
 from segma.models import (
     HydraWhisper,
     Models,
-    PyanNet,
-    PyanNetSlim,
+    SurgicalHydraHubert,
     SurgicalWhisper,
     Whisperidou,
     WhisperiMax,
 )
 from segma.utils import set_seed
-from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
+from segma.utils.encoders import MultiLabelEncoder
 from segma.utils.experiment import new_experiment_id
+
+
+def get_parameter_table(model: torch.nn.Module):
+    m_length = max(len(name) for name, _ in model.named_parameters()) + 2
+    total_params = 0
+    total_trainable_params = 0
+
+    print(f"{'Name':<{m_length}} | {'Params':<10} | {'Trainable params':<10}")
+    print("-" * (m_length + 32))
+    for name, p in model.named_parameters():
+        np = p.numel()
+        ntp = p.numel() if p.requires_grad else 0
+
+        total_params += np
+        total_trainable_params += ntp
+
+        print(f"{name:<{m_length}} | {np:<10} | {ntp:<10}")
+
+    # TODO - add percent trainable
+    print(total_params, total_trainable_params)
 
 
 def get_metric(metric: str) -> tuple[Literal["min", "max"], str]:
@@ -68,6 +87,11 @@ if __name__ == "__main__":
         help="Resume training, pass in checkpoint path.",
     )
     parser.add_argument(
+        "--freeze-encoder",
+        action="store_true",
+        help="Finetune all weights of the model",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="experiments",
@@ -90,18 +114,20 @@ if __name__ == "__main__":
     if not experiment_path.exists():
         experiment_path.mkdir()
 
-    if "hydra" in config.model.name:
-        l_encoder = MultiLabelEncoder(labels=config.data.classes)
-    else:
-        l_encoder = PowersetMultiLabelEncoder(labels=config.data.classes)
+    save_path = experiment_path / args.run_id
+    save_path.mkdir(parents=True, exist_ok=True)
+    config.save(save_path / "config.yml")
+
+    chkp_path = save_path / "checkpoints"
+    chkp_path.mkdir(parents=True, exist_ok=True)
+    last_ckpt = chkp_path / "last.ckpt"
+
+    if "hydra" not in config.model.name:
+        raise ValueError("Only `MultiLabelEncoder` is supported")
+    l_encoder = MultiLabelEncoder(labels=config.data.classes)
 
     model: (
-        Whisperidou
-        | WhisperiMax
-        | PyanNet
-        | PyanNetSlim
-        | SurgicalWhisper
-        | HydraWhisper
+        Whisperidou | WhisperiMax | SurgicalWhisper | HydraWhisper | SurgicalHydraHubert
     ) = Models[config.model.name](l_encoder, config)
 
     mode, monitor = get_metric(config.train.validation_metric)
@@ -118,13 +144,23 @@ if __name__ == "__main__":
 
     model.configure_optimizers = MethodType(configure_optimizers, model)
 
+    # Somewhere not syncing good params
+    if config.model.name == "surgical_hubert_hydra":
+        if not config.model.config.freeze_encoder:
+            for p in model.wav2vec2.encoder.parameters():
+                p.requires_grad = True
+
+    get_parameter_table(model)
+
+    print("segmafile loading")
+    sfd = SegmaFileDataset.from_config(config)
+
+    sfd.load(use_cache=False)
+
     print(
         f"[log @ {datetime.now().strftime('%Y%m%d_%H:%M:%S')}] - SegmentationDataLoader initializing ...",
         flush=True,
     )
-    sfd = SegmaFileDataset.from_config(config)
-    sfd.load()
-
     dm = SegmentationDataLoader(
         dataset=sfd,
         label_encoder=l_encoder,
@@ -137,31 +173,25 @@ if __name__ == "__main__":
         flush=True,
     )
 
-    save_path = experiment_path / args.run_id
-    save_path.mkdir(parents=True, exist_ok=True)
-    config.save(save_path / "config.yml")
-
-    chkp_path = save_path / "checkpoints"
-    chkp_path.mkdir(parents=True, exist_ok=True)
-    last_ckpt = chkp_path / "last.ckpt"
-
     print("[log] - use WandbLogger")
     logger = WandbLogger(
         project=config.wandb.project,
         name=config.wandb.name,
-        id=args.run_id,
+        id=args.run_id.split("-")[-1],
         log_model=False if config.wandb.offline else "all",
         tags=args.tags,
         offline=config.wandb.offline,
         resume="must" if args.auto_resume and last_ckpt.exists() else None,  # "never",
     )
-    logger.experiment.config.update(config)
-    # save_path = save_path.with_stem(save_path.stem + f"-{logger.experiment.id}")
+    # Allow val_change maybe not best idea but needed it for some reason
+    # TODO
+    logger.experiment.config.update(config, allow_val_change=True)
+    save_path = save_path.with_stem(save_path.stem + f"-{logger.experiment.id}")
 
     model_checkpoint = ModelCheckpoint(
         monitor=monitor,
         mode=mode,
-        save_top_k=-1,
+        save_top_k=10,
         # every_n_epochs=1,
         save_last=True,
         dirpath=chkp_path,
@@ -195,11 +225,10 @@ if __name__ == "__main__":
 
     # https://pytorch.org/docs/main/torch.compiler_troubleshooting.html#dealing-with-recompilations
     # https://docs.google.com/document/d/1y5CRfMLdwEoF1nTk9q8qEu1mgMUuUtvhklPKJ2emLU8/edit?tab=t.0#heading=h.t130sdb4rshr
-    if config.model.name in ("hydra_whisper", "HydraWhisper"):
-        torch._dynamo.config.accumulated_cache_size_limit = 32
-        if hasattr(torch._dynamo.config, "cache_size_limit"):
-            torch._dynamo.config.cache_size_limit = 32
-        model = torch.compile(model)
+    torch._dynamo.config.accumulated_cache_size_limit = 32
+    if hasattr(torch._dynamo.config, "cache_size_limit"):
+        torch._dynamo.config.cache_size_limit = 32
+    model = torch.compile(model)
 
     print(f"[log @ {datetime.now().strftime('%Y%m%d_%H%M')}] - started training")
     if args.auto_resume and last_ckpt.exists():

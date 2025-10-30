@@ -7,7 +7,7 @@ import yaml
 from segma.config import Config, load_config
 from segma.models import Models
 from segma.predict import sliding_prediction
-from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
+from segma.utils.encoders import MultiLabelEncoder
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -57,10 +57,9 @@ if __name__ == "__main__":
 
     cfg: Config = load_config(args.config)
 
-    if "hydra" in cfg.model.name:
-        l_encoder = MultiLabelEncoder(labels=cfg.data.classes)
-    else:
-        l_encoder = PowersetMultiLabelEncoder(labels=cfg.data.classes)
+    if "hydra" not in cfg.model.name:
+        raise ValueError("Only `MultiLabelEncoder` is supported")
+    l_encoder = MultiLabelEncoder(labels=cfg.data.classes)
 
     # NOTE - resolve output_path
     # if path is model/last/best -> resolve symlink
@@ -80,38 +79,31 @@ if __name__ == "__main__":
     )
 
     model.to(torch.device("mps" if torch.backends.mps.is_available() else "cuda"))
-    if cfg.model.name in ("hydra_whisper", "HydraWhisper"):
-        torch._dynamo.config.accumulated_cache_size_limit = 32
-        if hasattr(torch._dynamo.config, "cache_size_limit"):
-            torch._dynamo.config.cache_size_limit = 32
-        model = torch.compile(model)
+    model = torch.compile(model)
 
-    # NOTE if args.uris: path is known
     if args.uris:
         with Path(args.uris).open("r") as uri_f:
-            uris = [uri.strip() for uri in uri_f.readlines()]
-        for uri in uris:
-            wav_f = (args.wavs / uri).with_suffix(".wav")
-            print(f"[log] - running inference for file: '{wav_f.stem}'")
-            sliding_prediction(
-                wav_f,
-                model=model,
-                output_p=args.output,
-                config=cfg,
-                save_logits=args.save_logits,
-                thresholds=threshold_dict,
-            )
+            files_to_infer_on = [
+                (args.wavs / uri.strip()).with_suffix(".wav")
+                for uri in uri_f.readlines()
+            ]
     else:
-        for wav_f in args.wavs.glob("*.wav"):
-            print(f"[log] - running inference for file: '{wav_f.stem}'")
-            sliding_prediction(
-                wav_f,
-                model=model,
-                output_p=args.output,
-                config=cfg,
-                save_logits=args.save_logits,
-                thresholds=threshold_dict,
-            )
+        files_to_infer_on = list(args.wavs.glob("*.wav"))
+    n_files = len(files_to_infer_on)
+
+    for i, audio_path in enumerate(sorted(files_to_infer_on)):
+        print(
+            f"[log] - ({i:>{len(str(n_files))}}/{n_files}) - running inference for file: '{audio_path.stem}'",
+            flush=True,
+        )
+        sliding_prediction(
+            audio_path=audio_path,
+            model=model,
+            output_p=args.output,
+            config=cfg,
+            save_logits=args.save_logits,
+            thresholds=threshold_dict,
+        )
 
     # NOTE - symlink to models/last/[rttm|aa]
     static_p = Path("models/last")

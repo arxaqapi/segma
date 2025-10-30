@@ -104,12 +104,6 @@ class SurgicalHydra(BaseSegmentationModel):
             self.config.audio.chunk_duration_f, strict=False
         )
         lstm_out = lstm_out[:, :truncation_i, :]
-        return {
-            name: head(lstm_out)
-            # NOTE - sigmoid is added in BCEWithLogitsLoss, return only logits
-            # name: nn.functional.sigmoid(head(lstm_out))
-            for name, head in self.task_heads.items()
-        }
         return torch.stack(
             [head(lstm_out) for head in self.task_heads.values()], dim=-1
         )

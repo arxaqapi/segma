@@ -7,6 +7,7 @@ from typing import Literal, Self
 import numpy as np
 import torchaudio
 from interlap import InterLap
+from tqdm import tqdm
 
 from segma.config import Config
 from segma.data.utils import (
@@ -148,6 +149,7 @@ class SegmaFileDataset:
                 for subset, uris in subset_to_uris.items()
             }
             self.removed_uris["exclude.txt"] = uris_to_remove
+
         self.check_for_data_leakage(subset_to_uris)
         return subset_to_uris
 
@@ -163,7 +165,7 @@ class SegmaFileDataset:
         uris_to_remove: set[str] = set()
         for subset in self.SUBSET_NAMES:
             durations: list[tuple[int, int]] = []
-            for uri in self.subset_to_uris[subset]:
+            for uri in tqdm(self.subset_to_uris[subset]):
                 uri_path = (self.wav_p / uri).with_suffix(".wav").resolve()
                 info = torchaudio.info(uri=uri_path)
                 # NOTE - check that the audio is valid
@@ -200,7 +202,7 @@ class SegmaFileDataset:
                 raise ValueError(
                     f"subset '{subset}' is empty after removing all audio instances with duration < {self.chunk_duration_s} s and all audios/segments with invalid labels.\n"
                 )
-
+        print("Uris that have been removed", len(uris_to_remove))
         self.subds_to_durations = subds_to_durations
         self.subds_to_interlaps = subds_to_interlaps
 
@@ -261,7 +263,7 @@ class SegmaFileDataset:
         import time
 
         # REVIEW based on base_p
-        cache_path: Path = Path(".cache/segma") / self.base_p
+        cache_path: Path = Path(".cache/segma") / self.base_p.stem
         cache_path.mkdir(parents=True, exist_ok=True)
 
         subds_to_durations_p = cache_path / "subds_to_durations"
@@ -278,8 +280,8 @@ class SegmaFileDataset:
 
         # NOTE - if the has been create more than max_days days ago, trigger reloading and recaching
         if (
-            days_diff(subds_to_durations_p.stat().st_birthtime) > max_days
-            or days_diff(subds_to_interlaps_p.stat().st_birthtime) > max_days
+            days_diff(subds_to_durations_p.stat().st_ctime) > max_days
+            or days_diff(subds_to_interlaps_p.stat().st_ctime) > max_days
         ):
             raise CacheTooOldError(f"Cache is older than {max_days} days.")
 
@@ -297,9 +299,8 @@ class SegmaFileDataset:
         import pickle
 
         # REVIEW based on base_p
-        cache_path: Path = Path(".cache/segma") / self.base_p
+        cache_path: Path = Path(".cache/segma") / self.base_p.stem
         cache_path.mkdir(parents=True, exist_ok=True)
-
         with (cache_path / "subds_to_durations").open("wb") as bf:
             pickle.dump(self.subds_to_durations, bf)
         with (cache_path / "subds_to_interlaps").open("wb") as bf:

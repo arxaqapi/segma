@@ -15,7 +15,6 @@ from segma.predict import load_all_logits, predict_all_logits
 from segma.utils.encoders import (
     LabelEncoder,
     MultiLabelEncoder,
-    PowersetMultiLabelEncoder,
 )
 
 
@@ -134,11 +133,10 @@ def tune(
 
     # NOTE - load all logits test set in memory
     logits = load_all_logits(logits_p=logits_p)
-    label_encoder: LabelEncoder = (
-        MultiLabelEncoder(config.data.classes)
-        if "hydra" in config.model.name
-        else PowersetMultiLabelEncoder(config.data.classes)
-    )
+
+    if "hydra" not in config.model.name:
+        raise ValueError("Only `MultiLabelEncoder` is supported")
+    label_encoder = MultiLabelEncoder(labels=config.data.classes)
 
     def objective(trial: optuna.Trial):
         thresholds = {

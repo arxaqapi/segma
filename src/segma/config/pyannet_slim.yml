@@ -1,8 +1,0 @@
-sincnet:
-  stride: 10
-
-linear:
-  - 128
-  - 128
-
-classifier: 128

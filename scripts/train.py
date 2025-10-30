@@ -20,18 +20,15 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from segma.config import Config, load_config
 from segma.data import SegmaFileDataset, SegmentationDataLoader
 from segma.models import (
-    HydraWavLM,
     HydraWhisper,
     Models,
-    PyanNet,
-    PyanNetSlim,
-    SurgicalHydraWavLM,
+    SurgicalHydraHubert,
     SurgicalWhisper,
     Whisperidou,
     WhisperiMax,
 )
 from segma.utils import set_seed
-from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
+from segma.utils.encoders import MultiLabelEncoder
 
 
 def get_metric(metric: str) -> tuple[Literal["min", "max"], str]:
@@ -76,24 +73,17 @@ if __name__ == "__main__":
     if cfg.train.seed:
         set_seed(cfg.train.seed)
 
-    chkp_path = Path("models")
+    chkp_path = Path(cfg.model.chkp_path)
+    # FIXME - mkdir or not ?
     if not chkp_path.exists():
         chkp_path.mkdir()
 
-    if "hydra" in cfg.model.name:
-        l_encoder = MultiLabelEncoder(labels=cfg.data.classes)
-    else:
-        l_encoder = PowersetMultiLabelEncoder(labels=cfg.data.classes)
+    if "hydra" not in cfg.model.name:
+        raise ValueError("Only `MultiLabelEncoder` is supported")
+    l_encoder = MultiLabelEncoder(labels=cfg.data.classes)
 
     model: (
-        Whisperidou
-        | WhisperiMax
-        | PyanNet
-        | PyanNetSlim
-        | SurgicalWhisper
-        | HydraWhisper
-        | HydraWavLM
-        | SurgicalHydraWavLM
+        Whisperidou | WhisperiMax | SurgicalWhisper | HydraWhisper | SurgicalHydraHubert
     ) = Models[cfg.model.name](l_encoder, cfg)
 
     mode, monitor = get_metric(cfg.train.validation_metric)
@@ -131,7 +121,7 @@ if __name__ == "__main__":
     )
 
     reference_time = datetime.fromtimestamp(time.time()).strftime("%Y%m%d_%H%M%S")
-    save_path = Path("models") / f"{reference_time}"
+    save_path = chkp_path / f"{reference_time}"
 
     print("[log] - use WandbLogger")
 
@@ -154,7 +144,7 @@ if __name__ == "__main__":
     model_checkpoint = ModelCheckpoint(
         monitor=monitor,
         mode=mode,
-        save_top_k=-1,
+        save_top_k=5,
         # every_n_epochs=1,
         save_last=True,
         dirpath=chkp_path,

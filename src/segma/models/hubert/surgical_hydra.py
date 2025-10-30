@@ -98,11 +98,7 @@ class SurgicalHydraHubert(BaseSegmentationModel):
             )
 
         x = self.dropout(hidden_states[-1])
-        return {
-            name: head(x)
-            # NOTE - sigmoid is added in BCEWithLogitsLoss, return only logits
-            for name, head in self.task_heads.items()
-        }
+        return torch.stack([head(x) for head in self.task_heads.values()], dim=-1)
 
     def training_step(self, batch, batch_idx):
         x = batch["x"]

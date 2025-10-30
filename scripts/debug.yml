@@ -23,7 +23,6 @@ model:
   # name: hydra_whisper
   # name: whisperidou
   # name: surgical_whisper
-  # name: pyannet
   # name: pyannet_slim
 
 train:

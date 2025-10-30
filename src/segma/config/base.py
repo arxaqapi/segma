@@ -86,21 +86,6 @@ class SincNetConfig(BaseConfig):
 
 
 @dataclass
-class PyanNetConfig(BaseConfig):
-    sincnet: SincNetConfig
-    lstm: LSTMConfig
-    linear: list[int]
-    classifier: int
-
-
-@dataclass
-class PyanNetSlimConfig(BaseConfig):
-    sincnet: SincNetConfig
-    linear: list[int]
-    classifier: int
-
-
-@dataclass
 class WhisperidouConfig(BaseConfig):
     encoder: str
     linear: list[int]
@@ -156,8 +141,6 @@ class ModelConfig(BaseConfig):
     # is initialized as None in first pass, then as the correct model class manually (sub-optimal)
     config: (
         None
-        | PyanNetConfig
-        | PyanNetSlimConfig
         | WhisperidouConfig
         | WhisperimaxConfig
         | SurgicalWhisperConfig

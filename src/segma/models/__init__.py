@@ -1,5 +1,3 @@
-from segma.models.pyannet import PyanNet, PyanNetSlim
-
 from .hubert.surgical_hydra import SurgicalHydraHubert
 from .whisper.hydra import HydraWhisper
 from .whisper.surgical import SurgicalWhisper
@@ -10,8 +8,6 @@ from .whisper.whisperimax import WhisperiMax
 Models = {
     "whisperidou": Whisperidou,
     "whisperimax": WhisperiMax,
-    "pyannet": PyanNet,
-    "pyannet_slim": PyanNetSlim,
     "surgical_whisper": SurgicalWhisper,
     "hydra_whisper": HydraWhisper,
     "surgical_hydra": SurgicalHydra,
@@ -22,8 +18,6 @@ Models = {
 __all__ = [
     "Whisperidou",
     "WhisperiMax",
-    "PyanNet",
-    "PyanNetSlim",
     "SurgicalWhisper",
     "HydraWhisper",
     "SurgicalHydra",

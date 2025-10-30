@@ -22,15 +22,13 @@ from segma.data import SegmaFileDataset, SegmentationDataLoader
 from segma.models import (
     HydraWhisper,
     Models,
-    PyanNet,
-    PyanNetSlim,
     SurgicalHydraHubert,
     SurgicalWhisper,
     Whisperidou,
     WhisperiMax,
 )
 from segma.utils import set_seed
-from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
+from segma.utils.encoders import MultiLabelEncoder
 
 
 def get_metric(metric: str) -> tuple[Literal["min", "max"], str]:
@@ -80,19 +78,12 @@ if __name__ == "__main__":
     if not chkp_path.exists():
         chkp_path.mkdir()
 
-    if "hydra" in cfg.model.name:
-        l_encoder = MultiLabelEncoder(labels=cfg.data.classes)
-    else:
-        l_encoder = PowersetMultiLabelEncoder(labels=cfg.data.classes)
+    if "hydra" not in cfg.model.name:
+        raise ValueError("Only `MultiLabelEncoder` is supported")
+    l_encoder = MultiLabelEncoder(labels=cfg.data.classes)
 
     model: (
-        Whisperidou
-        | WhisperiMax
-        | PyanNet
-        | PyanNetSlim
-        | SurgicalWhisper
-        | HydraWhisper
-        | SurgicalHydraHubert
+        Whisperidou | WhisperiMax | SurgicalWhisper | HydraWhisper | SurgicalHydraHubert
     ) = Models[cfg.model.name](l_encoder, cfg)
 
     mode, monitor = get_metric(cfg.train.validation_metric)

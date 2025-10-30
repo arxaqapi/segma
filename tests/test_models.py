@@ -3,7 +3,7 @@ import yaml
 
 from segma.config.base import Config, load_config
 from segma.models import Models
-from segma.utils.encoders import MultiLabelEncoder, PowersetMultiLabelEncoder
+from segma.utils.encoders import MultiLabelEncoder
 
 
 def test_setup_gen_conf():
@@ -23,11 +23,10 @@ def test_models():
     labels = ("MAL", "FEM", "KCHI", "OCH")
 
     for model_name, model_c in Models.items():
-        label_encoder = (
-            MultiLabelEncoder(labels)
-            if "hydra" in model_name
-            else PowersetMultiLabelEncoder(labels)
-        )
+        if "hydra" not in model_name:
+            raise ValueError("Only `MultiLabelEncoder` is supported")
+        label_encoder = MultiLabelEncoder(labels)
+
         cfg: Config = load_config(
             config_path=f"tests/sample/temp_config_{model_name}.yml",
         )
@@ -44,11 +43,10 @@ def test_Whisper_based_forward():
         if (
             "whisper" in model_name or "hydra" in model_name
         ) and "wavlm" not in model_name:
-            label_encoder = (
-                MultiLabelEncoder(labels)
-                if "hydra" in model_name
-                else PowersetMultiLabelEncoder(labels)
-            )
+            if "hydra" not in model_name:
+                raise ValueError("Only `MultiLabelEncoder` is supported")
+            label_encoder = MultiLabelEncoder(labels)
+
             cfg: Config = load_config(
                 config_path=f"tests/sample/temp_config_{model_name}.yml",
             )
@@ -63,11 +61,10 @@ def test_WavLM_based_forward():
 
     for model_name, model_c in Models.items():
         if "wavlm" in model_name:
-            label_encoder = (
-                MultiLabelEncoder(labels)
-                if "hydra" in model_name
-                else PowersetMultiLabelEncoder(labels)
-            )
+            if "hydra" not in model_name:
+                raise ValueError("Only `MultiLabelEncoder` is supported")
+            label_encoder = MultiLabelEncoder(labels)
+
             cfg: Config = load_config(
                 config_path=f"tests/sample/temp_config_{model_name}.yml",
             )

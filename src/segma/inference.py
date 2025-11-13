@@ -1,5 +1,4 @@
 import argparse
-from functools import cache
 from math import floor
 from pathlib import Path
 
@@ -16,50 +15,75 @@ from segma.structs.interval import Intervals
 from segma.utils.encoders import MultiLabelEncoder
 
 
-@cache
-def chunk_start_i(i: int) -> int:
-    """Start index of chunk `i` while taking into account the missing frames per chunk.
+class Chunkyfier:
+    def __init__(
+        self, batch_size: int, chunk_duration_f: int, cnn_settings: ConvolutionSettings
+    ):
+        self.cnn_settings = cnn_settings
+        self.chunk_duration_f = chunk_duration_f
+        self.batch_size = batch_size
 
-    Args:
-        i (int): index of the chunk.
+        self.n_windows = self.cnn_settings.n_windows(self.chunk_duration_f, strict=True)
+        self.missing_n_frames = (
+            self.chunk_duration_f - self.n_windows * self.cnn_settings.rf_step
+        )
 
-    Returns:
-        int: start index of the chunck.
-    """
-    return i * 199 * 320
+        assert self.n_windows == 199
+        assert self.missing_n_frames == 320
 
+    def chunk_start_i(self, i: int) -> int:
+        """Start index of chunk `i` while taking into account the missing frames per chunk.
 
-@cache
-def chunk_end_i(i: int, chunk_duration_f: int) -> int:
-    return chunk_start_i(i) + chunk_duration_f
+        Args:
+            i (int): index of the chunk.
 
+        Returns:
+            int: start index of the chunck.
+        """
+        return i * self.n_windows * self.missing_n_frames
 
-@cache
-def chunk_end_i_coverage(i: int) -> int:
-    """End of the coverage of chunk `i` taking into account the missing frames skipped by the forward pass of the model.
+    def chunk_end_i(self, i: int) -> int:
+        return self.chunk_start_i(i) + self.chunk_duration_f
 
-    Args:
-        i (int): index of the chunk.
+    def chunk_end_i_coverage(self, i: int) -> int:
+        """End of the coverage of chunk `i` taking into account the missing frames skipped by the forward pass of the model.
 
-    Returns:
-        int: end index of the chunck.
-    """
-    return (i + 1) * 199 * 320
+        Args:
+            i (int): index of the chunk.
 
+        Returns:
+            int: end index of the chunck.
+        """
+        return (i + 1) * self.n_windows * self.missing_n_frames
 
-@cache
-def batch_start_i(i: int, batch_size: int) -> int:
-    return i * batch_size * (199 * 320)
+    def batch_start_i(self, i: int) -> int:
+        return i * self.batch_size * (self.n_windows * self.missing_n_frames)
 
+    def batch_end_i(self, i: int) -> int:
+        return self.batch_start_i(i) + self.batch_size * self.chunk_duration_f
 
-@cache
-def batch_end_i(i: int, batch_size: int, chunk_duration_f: int) -> int:
-    return batch_start_i(i, batch_size) + batch_size * chunk_duration_f
+    def batch_end_i_coverage(self, i: int) -> int:
+        return self.batch_end_i(i) - self.batch_size * self.missing_n_frames
 
+    def get_n_fitting_chunks(self, n_frames: int) -> int:
+        """Given a number of frames, computes the amount of complete overlaping window that fit in
+        the given number of frames.
 
-@cache
-def batch_end_i_coverage(i: int, batch_size: int, chunk_duration_f: int) -> int:
-    return batch_end_i(i, batch_size, chunk_duration_f) - batch_size * 320
+        Args:
+            n_frames (int): number of frames to take into account
+
+        Returns:
+            int: Number of complete windowd with overlap that fit in `_n_frames`.
+        """
+        return (
+            floor(
+                (
+                    (n_frames - self.chunk_duration_f)
+                    / (self.chunk_duration_f - self.missing_n_frames)
+                )
+            )
+            + 1
+        )
 
 
 def prepare_audio(
@@ -90,41 +114,21 @@ def prepare_audio(
     return sub_audio_t.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
 
-def get_n_fitting_chunks(
-    n_frames: int, chunk_duration_f: int, missing_n_frames: int
-) -> int:
-    """Given a number of frames, computes the amount of complete overlaping window that fit in
-    the given number of frames.
-
-    Args:
-        n_frames (int): number of frames to take into account
-        chunk_duration_f (int, optional): Duration or size of the window that should fit entirely. Defaults to 64_000.
-        missing_n_frames (int, optional): Missing number of frames or amount of overlap between each window. Defaults to 320.
-
-    Returns:
-        int: Number of complete windowd with overlap that fit in `_n_frames`.
-    """
-    return (
-        floor(((n_frames - chunk_duration_f) / (chunk_duration_f - missing_n_frames)))
-        + 1
-    )
-
-
 def apply_model_on_audio(
     audio_path: Path,
     model: torch.nn.Module,
+    conv_settings: ConvolutionSettings,
     batch_size: int = 128,
     chunk_duration_s: float = 4.0,
-    missing_n_frames: int = 320,
     sample_rate: int = 16_000,
 ) -> torch.Tensor:
     """Apply model on audio, return tensor of size (n_frames, n_classes)"""
     chunk_duration_f = int(chunk_duration_s * sample_rate)
     n_frames_audio = torchaudio.info(audio_path).num_frames
 
-    n_fitting_chunks = get_n_fitting_chunks(
-        n_frames_audio, chunk_duration_f, missing_n_frames
-    )
+    chunkyfier = Chunkyfier(batch_size, chunk_duration_f, conv_settings)
+
+    n_fitting_chunks = chunkyfier.get_n_fitting_chunks(n_frames_audio)
     n_full_batches = floor(n_fitting_chunks / batch_size)
 
     logits = []
@@ -133,13 +137,14 @@ def apply_model_on_audio(
         sub_audio_t = prepare_audio(
             audio_path,
             model,
-            start_f=batch_start_i(i, batch_size=batch_size),
-            end_f=batch_end_i_coverage(i, batch_size, chunk_duration_f)
-            + missing_n_frames,
+            start_f=chunkyfier.batch_start_i(i),
+            end_f=chunkyfier.batch_end_i_coverage(i) + chunkyfier.missing_n_frames,
         )
 
         batch_t = sub_audio_t.unfold(
-            0, size=chunk_duration_f, step=chunk_duration_f - missing_n_frames
+            0,
+            size=chunk_duration_f,
+            step=chunk_duration_f - chunkyfier.missing_n_frames,
         )
         if batch_t.shape[0] != batch_size:
             raise ValueError(
@@ -151,8 +156,8 @@ def apply_model_on_audio(
         logits.append(out_t)
 
     # NOTE - Handle chunks that do not fit in a batch
-    leftover_frames = n_frames_audio - batch_end_i_coverage(
-        n_full_batches - 1, batch_size, chunk_duration_f
+    leftover_frames = n_frames_audio - chunkyfier.batch_end_i_coverage(
+        n_full_batches - 1
     )
     if leftover_frames:
         # ==========================================
@@ -160,18 +165,18 @@ def apply_model_on_audio(
         sub_audio_t = prepare_audio(
             audio_path,
             model,
-            start_f=batch_start_i(n_full_batches, batch_size),
-            end_f=chunk_start_i(
+            start_f=chunkyfier.batch_start_i(n_full_batches),
+            end_f=chunkyfier.chunk_start_i(
                 n_full_batches * batch_size
-                + get_n_fitting_chunks(
-                    leftover_frames, chunk_duration_f, missing_n_frames
-                )
+                + chunkyfier.get_n_fitting_chunks(leftover_frames)
             )
-            + missing_n_frames,
+            + chunkyfier.missing_n_frames,
         )
         # NOTE - unfold into chunks
         batch_t = sub_audio_t.unfold(
-            0, size=chunk_duration_f, step=chunk_duration_f - missing_n_frames
+            0,
+            size=chunk_duration_f,
+            step=chunk_duration_f - chunkyfier.missing_n_frames,
         )
         # NOTE - pass through model
         with torch.inference_mode():
@@ -183,11 +188,9 @@ def apply_model_on_audio(
         last_audio_t = prepare_audio(
             audio_path,
             model,
-            start_f=chunk_start_i(
+            start_f=chunkyfier.chunk_start_i(
                 n_full_batches * batch_size
-                + get_n_fitting_chunks(
-                    leftover_frames, chunk_duration_f, missing_n_frames
-                )
+                + chunkyfier.get_n_fitting_chunks(leftover_frames)
             ),
         )
         # NOTE - pass through model
@@ -292,6 +295,7 @@ def infer(
         model=model,
         batch_size=batch_size,
         chunk_duration_s=config.audio.chunk_duration_s,
+        conv_settings=inference_settings,
     )
 
     # NOTE - apply tresholding
@@ -319,21 +323,21 @@ def main(
     thresholds: dict | None,
     batch_size: int,
 ):
-    args.wavs = Path(args.wavs)
-    args.checkpoint = Path(args.checkpoint)
-    args.output = Path(args.output)
+    wavs = Path(wavs)
+    checkpoint = Path(checkpoint)
+    output = Path(output)
 
-    if not args.wavs.exists():
-        raise ValueError(f"Path `{args.wavs=}` does not exists")
-    if not args.checkpoint.exists():
-        raise ValueError(f"Path `{args.checkpoint=}` does not exists")
-    if args.thresholds:
-        if not Path(args.thresholds).exists():
+    if not wavs.exists():
+        raise ValueError(f"Path `{wavs=}` does not exists")
+    if not checkpoint.exists():
+        raise ValueError(f"Path `{checkpoint=}` does not exists")
+    if thresholds:
+        if not Path(thresholds).exists():
             raise ValueError("Path to a valid threshold dict does not exist.")
-        with Path(args.thresholds).open("r") as f:
-            args.thresholds = yaml.safe_load(f)
+        with Path(thresholds).open("r") as f:
+            thresholds = yaml.safe_load(f)
 
-    config: Config = load_config(args.config)
+    config: Config = load_config(config)
 
     if "hydra" not in config.model.name:
         raise ValueError("only MultiLabelEncoder is supported")
@@ -348,14 +352,13 @@ def main(
     # model = torch.compile(model)
 
     # NOTE - get files and run inference
-    if args.uris:
-        with Path(args.uris).open("r") as uri_f:
+    if uris:
+        with Path(uris).open("r") as uri_f:
             files_to_infer_on = [
-                (args.wavs / uri.strip()).with_suffix(".wav")
-                for uri in uri_f.readlines()
+                (wavs / uri.strip()).with_suffix(".wav") for uri in uri_f.readlines()
             ]
     else:
-        files_to_infer_on = sorted(list(args.wavs.glob("*.wav")))
+        files_to_infer_on = sorted(list(wavs.glob("*.wav")))
     n_files = len(files_to_infer_on)
 
     for i, audio_path in enumerate(sorted(files_to_infer_on), 1):
@@ -367,10 +370,10 @@ def main(
         infer(
             audio_path=audio_path,
             model=model,
-            output_p=args.output,
+            output_p=output,
             config=config,
-            thresholds=args.thresholds,
-            batch_size=args.batch_size,
+            thresholds=thresholds,
+            batch_size=batch_size,
         )
 
 

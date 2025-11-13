@@ -15,9 +15,6 @@ from segma.predict import write_intervals
 from segma.structs.interval import Intervals
 from segma.utils.encoders import MultiLabelEncoder
 
-# ============================================================
-# ============================================================
-
 
 @cache
 def chunk_start_i(i: int) -> int:
@@ -63,10 +60,6 @@ def batch_end_i(i: int, batch_size: int, chunk_duration_f: int) -> int:
 @cache
 def batch_end_i_coverage(i: int, batch_size: int, chunk_duration_f: int) -> int:
     return batch_end_i(i, batch_size, chunk_duration_f) - batch_size * 320
-
-
-# ============================================================
-# ============================================================
 
 
 def prepare_audio(

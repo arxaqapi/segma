@@ -2,16 +2,17 @@ import argparse
 from math import floor
 from pathlib import Path
 
+import numpy as np
 import torch
 import torchaudio
 import yaml
 
+from segma.annotation import AudioAnnotation
 from segma.config import load_config
 from segma.config.base import Config
 from segma.models import Models
 from segma.models.base import BaseSegmentationModel, ConvolutionSettings
-from segma.predict import write_intervals
-from segma.structs.interval import Intervals
+from segma.utils.conversions import frames_to_seconds
 from segma.utils.encoders import MultiLabelEncoder
 
 
@@ -229,8 +230,8 @@ def create_intervals(
     thresholded_features: torch.Tensor,
     conv_settings: ConvolutionSettings,
     label_encoder: MultiLabelEncoder,
-) -> Intervals:
-    """Given the frames and their activated label, construct the intervals.
+) -> list[tuple[int, int, str]]:
+    """Given the thresholded logits and the convolutional settings used, construct the detection intervals.
 
     Args:
         thresholded_features (torch.Tensor): Tensor of 0 and 1 values, compatible with multi-label classification.
@@ -238,22 +239,40 @@ def create_intervals(
         label_encoder (MultiLabelEncoder): Label encoder used containing the labels
 
     Returns:
-        Intervals: Structure containing the final intervals.
+        list[tuple[int, int, str]]: List of final intervals.
     """
-    intervals = Intervals()
+    # thresholded_features: (n_feat, 4)
+    intervals = []
 
-    # ( positive_instance, 2: (feat_i, label_i) )
-    indices = torch.argwhere(thresholded_features)
-    for feat_i, label_i in indices:
-        feat_i_item = int(feat_i.item())
-        fs = conv_settings.rf_start_i(feat_i_item)
-
-        frame_start = max(0, fs)
-        frame_end = fs + conv_settings.rf_step  # .rf_end_i(feat_i_item) + 1
-        label = label_encoder.inv_transform(int(label_i.item()))
-
-        intervals.add((frame_start, frame_end, label))
+    slices = np.ma.notmasked_contiguous(
+        np.ma.masked_values(thresholded_features, value=0), axis=0
+    )
+    for label_i, label in enumerate(label_encoder.base_labels):
+        for slice in slices[label_i]:
+            interval_start = max(0, conv_settings.rf_start_i(slice.start))
+            interval_end = conv_settings.rf_end_i(slice.stop - 1) + 1
+            intervals.append((interval_start, interval_end, label))
     return intervals
+
+
+def write_intervals(
+    intervals: list[tuple[int, int, str]], audio_path: Path, output_p: Path
+):
+    rttm_out = output_p / "raw_rttm"
+    rttm_out.mkdir(exist_ok=True, parents=True)
+
+    uri = audio_path.stem
+    with (
+        (rttm_out / uri).with_suffix(".rttm").open("w") as rttm_f,
+    ):
+        for start_f, end_f, label in intervals:
+            aa = AudioAnnotation(
+                uid=audio_path.stem,
+                start_time_s=float(frames_to_seconds(start_f)),
+                duration_s=float(frames_to_seconds(end_f - start_f)),
+                label=str(label),
+            )
+            rttm_f.write(aa.to_rttm() + "\n")
 
 
 def infer(
@@ -303,7 +322,7 @@ def infer(
         apply_thresholds(logits_t, thresholds=thresholds).detach().cpu()
     )
 
-    # NOTE - cerate intervals
+    # NOTE - create intervals
     intervals = create_intervals(
         thresholded_features=thresholded_features,
         conv_settings=inference_settings,

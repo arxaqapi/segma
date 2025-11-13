@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from functools import reduce
+from functools import cached_property, reduce
 from math import floor, prod
 
 import lightning as pl
@@ -73,6 +73,7 @@ class ConvolutionSettings:
 
         return v_L * S_0 - rt
 
+    @cached_property
     def rf_size(self) -> int:
         """Computes the size of the receptive field.
 
@@ -99,8 +100,9 @@ class ConvolutionSettings:
         for layer_i in range(L):
             P_0 += self.paddings[layer_i] * prod(self.strides[:layer_i])
 
-        return u_L * S_0 + (self.rf_size() - 1) / 2 - P_0
+        return u_L * S_0 + (self.rf_size - 1) / 2 - P_0
 
+    @cached_property
     def rf_step(self) -> int:
         """Returns the step size (stride) between 2 receptive fields.
 
@@ -132,11 +134,10 @@ class ConvolutionSettings:
 
         # Should be 320 (f) with duration 2 secs and whisper model
         # Should be 270 (f) with duration 2 secs and sinc model
-        rf_step = int(self.rf_step() + correction)
+        rf_step = int(self.rf_step + correction)
 
         if strict:
-            return floor((chunk_duration_f - self.rf_size()) / rf_step)
-            +1
+            return floor((chunk_duration_f - self.rf_size) / rf_step) + 1
         else:
             return chunk_duration_f // rf_step
 

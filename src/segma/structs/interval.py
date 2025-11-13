@@ -23,16 +23,14 @@ class Intervals:
         intervals.sort()
 
         ret = [intervals[0]]
-        for next_i, (s, e, label) in enumerate(intervals, start=1):
-            if next_i == len(intervals):
-                ret[-1] = ret[-1][0], max(ret[-1][1], e), label
-                break
-
-            ns, ne, label = intervals[next_i]
-            if e > ns or ret[-1][1] > ns:
-                ret[-1] = ret[-1][0], max(e, ne, ret[-1][1]), label
+        for s, e, label in intervals[1:]:
+            # Check if current interval overlaps or is adjacent to the last one
+            if s <= ret[-1][1]:  # Changed from > to <= to merge adjacent intervals
+                # Merge by extending the end of the last interval
+                ret[-1] = (ret[-1][0], max(ret[-1][1], e), label)
             else:
-                ret.append((ns, ne, label))
+                # No overlap, add as new interval
+                ret.append((s, e, label))
         return ret
 
     def _reduce_per_label(self, intervals: list[Interval]) -> list[Interval]:

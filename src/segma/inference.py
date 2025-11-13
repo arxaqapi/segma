@@ -310,38 +310,15 @@ def infer(
     write_intervals(intervals=intervals, audio_path=audio_path, output_p=output_p)
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--config",
-        type=str,
-        required=True,
-        help="Config file to be loaded and used for inference.",
-    )
-    parser.add_argument("--uris", help="list of uris to use for prediction")
-    parser.add_argument("--wavs", default="data/debug/wav")
-    parser.add_argument(
-        "--checkpoint",
-        default="models/last/best.ckpt",
-        help="Path to a pretrained model checkpoint.",
-    )
-    parser.add_argument(
-        "--output",
-        required=True,
-        help="Output Path to the folder that will contain the final predictions.",
-    )
-    parser.add_argument(
-        "--thresholds",
-        help="Path to a threshold dict, perform predictions using these threshols, otherwise use default value of .5.",
-    )
-    parser.add_argument(
-        "--batch_size",
-        default=128,
-        type=int,
-        help="Size of the batch used for the forward pass in the model.",
-    )
-
-    args = parser.parse_args()
+def main(
+    config: Path,
+    uris: Path | None,
+    wavs: Path,
+    checkpoint: Path,
+    output: Path,
+    thresholds: dict | None,
+    batch_size: int,
+):
     args.wavs = Path(args.wavs)
     args.checkpoint = Path(args.checkpoint)
     args.output = Path(args.output)
@@ -359,7 +336,7 @@ if __name__ == "__main__":
     config: Config = load_config(args.config)
 
     if "hydra" not in config.model.name:
-        raise ValueError("only MLE for the moment")
+        raise ValueError("only MultiLabelEncoder is supported")
     l_encoder = MultiLabelEncoder(labels=config.data.classes)
 
     model = Models[config.model.name].load_from_checkpoint(
@@ -395,3 +372,39 @@ if __name__ == "__main__":
             thresholds=args.thresholds,
             batch_size=args.batch_size,
         )
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--config",
+        type=str,
+        required=True,
+        help="Config file to be loaded and used for inference.",
+    )
+    parser.add_argument("--uris", help="list of uris to use for prediction")
+    parser.add_argument("--wavs", required=True, default="data/debug/wav")
+    parser.add_argument(
+        "--checkpoint",
+        default="models/last/best.ckpt",
+        help="Path to a pretrained model checkpoint.",
+    )
+    parser.add_argument(
+        "--output",
+        required=True,
+        help="Output Path to the folder that will contain the final predictions.",
+    )
+    parser.add_argument(
+        "--thresholds",
+        help="Path to a threshold dict, perform predictions using these threshols, otherwise use default value of .5.",
+    )
+    parser.add_argument(
+        "--batch_size",
+        default=128,
+        type=int,
+        help="Size of the batch used for the forward pass in the model.",
+    )
+
+    args = parser.parse_args()
+
+    main(**vars(args))

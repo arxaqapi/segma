@@ -275,7 +275,7 @@ def write_intervals(
             rttm_f.write(aa.to_rttm() + "\n")
 
 
-def infer(
+def infer_file(
     audio_path: Path,
     model: BaseSegmentationModel,
     output_p: Path,
@@ -333,7 +333,7 @@ def infer(
     write_intervals(intervals=intervals, audio_path=audio_path, output_p=output_p)
 
 
-def main(
+def run_inference_on_audios(
     config: Path,
     uris: Path | None,
     wavs: Path,
@@ -386,7 +386,7 @@ def main(
             flush=True,
         )
 
-        infer(
+        infer_file(
             audio_path=audio_path,
             model=model,
             output_p=output,
@@ -429,4 +429,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    main(**vars(args))
+    run_inference_on_audios(**vars(args))

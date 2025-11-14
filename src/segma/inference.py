@@ -363,7 +363,7 @@ def run_inference_on_audios(
     l_encoder = MultiLabelEncoder(labels=config.data.classes)
 
     model = Models[config.model.name].load_from_checkpoint(
-        checkpoint_path=checkpoint, label_encoder=l_encoder, config=config
+        checkpoint_path=checkpoint, label_encoder=l_encoder, config=config, train=False
     )
     model.eval()
 

@@ -341,7 +341,11 @@ def run_inference_on_audios(
     output: Path,
     thresholds: dict | None,
     batch_size: int,
-):
+) -> list[Path]:
+    """
+    Returns:
+        list[Path]: List of file paths on which inference was performed
+    """
     wavs = Path(wavs)
     checkpoint = Path(checkpoint)
     output = Path(output)
@@ -377,7 +381,7 @@ def run_inference_on_audios(
                 (wavs / uri.strip()).with_suffix(".wav") for uri in uri_f.readlines()
             ]
     else:
-        files_to_infer_on = sorted(list(wavs.glob("*.wav")))
+        files_to_infer_on = list(wavs.glob("*.wav"))
     n_files = len(files_to_infer_on)
 
     for i, audio_path in enumerate(sorted(files_to_infer_on), 1):
@@ -394,6 +398,7 @@ def run_inference_on_audios(
             thresholds=thresholds,
             batch_size=batch_size,
         )
+    return files_to_infer_on
 
 
 if __name__ == "__main__":

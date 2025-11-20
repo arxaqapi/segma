@@ -1,6 +1,7 @@
 import argparse
 from math import floor
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import torch
@@ -90,6 +91,7 @@ class Chunkyfier:
 def prepare_audio(
     audio_path: Path,
     model: BaseSegmentationModel,
+    device: Literal["cuda", "cpu", "mps"],
     start_f: int,
     end_f: int | None = None,
 ):
@@ -112,13 +114,14 @@ def prepare_audio(
         num_frames=num_frames,
     )[0]
     sub_audio_t = model.audio_preparation_hook(sub_audio_t.squeeze(1)).squeeze(0)
-    return sub_audio_t.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    return sub_audio_t.to(torch.device(device))
 
 
 def apply_model_on_audio(
     audio_path: Path,
     model: torch.nn.Module,
     conv_settings: ConvolutionSettings,
+    device: Literal["cuda", "cpu", "mps"],
     batch_size: int = 128,
     chunk_duration_s: float = 4.0,
     sample_rate: int = 16_000,
@@ -138,6 +141,7 @@ def apply_model_on_audio(
         sub_audio_t = prepare_audio(
             audio_path,
             model,
+            device=device,
             start_f=chunkyfier.batch_start_i(i),
             end_f=chunkyfier.batch_end_i_coverage(i) + chunkyfier.missing_n_frames,
         )
@@ -166,6 +170,7 @@ def apply_model_on_audio(
         sub_audio_t = prepare_audio(
             audio_path,
             model,
+            device=device,
             start_f=chunkyfier.batch_start_i(n_full_batches),
             end_f=chunkyfier.chunk_start_i(
                 n_full_batches * batch_size
@@ -189,6 +194,7 @@ def apply_model_on_audio(
         last_audio_t = prepare_audio(
             audio_path,
             model,
+            device=device,
             start_f=chunkyfier.chunk_start_i(
                 n_full_batches * batch_size
                 + chunkyfier.get_n_fitting_chunks(leftover_frames)
@@ -206,7 +212,9 @@ def apply_model_on_audio(
 
 
 def apply_thresholds(
-    feature_tensor: torch.Tensor, thresholds: dict[str, dict[str, float]]
+    feature_tensor: torch.Tensor,
+    thresholds: dict[str, dict[str, float]],
+    device: Literal["cuda", "cpu", "mps"],
 ) -> torch.Tensor:
     """Given raw logits, perform thresholding.
 
@@ -221,7 +229,7 @@ def apply_thresholds(
     assert feature_tensor.shape[-1] == len(thresholds)
     threshold_tensor = torch.tensor(
         [label["lower_bound"] for label in thresholds.values()]
-    ).to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    ).to(torch.device(device))
 
     return feature_tensor > threshold_tensor
 
@@ -281,6 +289,7 @@ def infer_file(
     output_p: Path,
     config: Config,
     batch_size: int,
+    device: Literal["cuda", "cpu", "mps"],
     thresholds: None | dict = None,
 ):
     """Apply the model on the audio in a streaming fashion to ensure memory integrity,
@@ -315,11 +324,12 @@ def infer_file(
         batch_size=batch_size,
         chunk_duration_s=config.audio.chunk_duration_s,
         conv_settings=inference_settings,
+        device=device,
     )
 
     # NOTE - apply tresholding
     thresholded_features = (
-        apply_thresholds(logits_t, thresholds=thresholds).detach().cpu()
+        apply_thresholds(logits_t, thresholds=thresholds, device=device).detach().cpu()
     )
 
     # NOTE - create intervals
@@ -341,6 +351,7 @@ def run_inference_on_audios(
     output: Path,
     thresholds: dict | None,
     batch_size: int,
+    device: Literal["gpu", "cuda", "cpu", "mps"] = "cuda",
 ) -> list[Path]:
     """
     Returns:
@@ -349,6 +360,7 @@ def run_inference_on_audios(
     wavs = Path(wavs)
     checkpoint = Path(checkpoint)
     output = Path(output)
+    device = "cuda" if device == "gpu" else device
 
     if not wavs.exists():
         raise ValueError(f"Path `{wavs=}` does not exists")
@@ -371,8 +383,7 @@ def run_inference_on_audios(
     )
     model.eval()
 
-    model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-    # model = torch.compile(model)
+    model.to(torch.device(device))
 
     # NOTE - get files and run inference
     if uris:
@@ -395,8 +406,9 @@ def run_inference_on_audios(
             model=model,
             output_p=output,
             config=config,
-            thresholds=thresholds,
             batch_size=batch_size,
+            device=device,
+            thresholds=thresholds,
         )
     return files_to_infer_on
 
@@ -429,6 +441,12 @@ if __name__ == "__main__":
         "--batch_size",
         default=128,
         type=int,
+        help="Size of the batch used for the forward pass in the model.",
+    )
+    parser.add_argument(
+        "--device",
+        default="cuda",
+        choices=["gpu", "cuda", "cpu", "mps"],
         help="Size of the batch used for the forward pass in the model.",
     )
 

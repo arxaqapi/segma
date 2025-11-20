@@ -190,16 +190,16 @@ def apply_model_on_audio(
         logits.append(out_t)
 
     # NOTE - Handle missing frames that do not fit in a chunk
-    if leftover_frames:
+    last_start_position = chunkyfier.chunk_start_i(
+        n_full_batches * batch_size + chunkyfier.get_n_fitting_chunks(leftover_frames)
+    )
+    if n_frames_audio - last_start_position > chunkyfier.cnn_settings.rf_step:
         # ==========================================
         last_audio_t = prepare_audio(
             audio_path,
             model,
             device=device,
-            start_f=chunkyfier.chunk_start_i(
-                n_full_batches * batch_size
-                + chunkyfier.get_n_fitting_chunks(leftover_frames)
-            ),
+            start_f=last_start_position,
         )
         # NOTE - pass through model
         with torch.inference_mode():

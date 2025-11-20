@@ -109,7 +109,7 @@ def prepare_audio(
     """
     num_frames = end_f - start_f if end_f else -1
     sub_audio_t = torchaudio.load(
-        uri=audio_path.resolve(),
+        uri=str(audio_path.resolve()),
         frame_offset=start_f,
         num_frames=num_frames,
     )[0]
@@ -128,7 +128,7 @@ def apply_model_on_audio(
 ) -> torch.Tensor:
     """Apply model on audio, return tensor of size (n_frames, n_classes)"""
     chunk_duration_f = int(chunk_duration_s * sample_rate)
-    n_frames_audio = torchaudio.info(audio_path).num_frames
+    n_frames_audio = torchaudio.info(str(audio_path)).num_frames
 
     chunkyfier = Chunkyfier(batch_size, chunk_duration_f, conv_settings)
 
@@ -160,11 +160,11 @@ def apply_model_on_audio(
             out_t = model(batch_t).squeeze(2)
         logits.append(out_t)
 
-    # NOTE - Handle chunks that do not fit in a batch
+    # NOTE - Handle missing chunks that do not fit in a batch
     leftover_frames = n_frames_audio - chunkyfier.batch_end_i_coverage(
         n_full_batches - 1
     )
-    if leftover_frames:
+    if leftover_frames and leftover_frames >= chunk_duration_f:
         # ==========================================
         # NOTE - load audio section
         sub_audio_t = prepare_audio(
@@ -189,8 +189,9 @@ def apply_model_on_audio(
             out_t = model(batch_t)
         logits.append(out_t)
 
+    # NOTE - Handle missing frames that do not fit in a chunk
+    if leftover_frames:
         # ==========================================
-        # NOTE - handle frames that do not fit in a chunk
         last_audio_t = prepare_audio(
             audio_path,
             model,

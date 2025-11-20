@@ -343,6 +343,44 @@ def infer_file(
     write_intervals(intervals=intervals, audio_path=audio_path, output_p=output_p)
 
 
+def get_list_of_files_to_process(
+    wavs: Path, recursive: bool = False, uris: Path | None = None
+) -> tuple[list[Path], int]:
+    """Get list of files to process.
+
+    Args:
+        wavs (Path): Path to the folder containing the `.wav` files.
+        recursive (bool, optional): Recursively search for `.wav` files. Might be slow. Defaults to False.
+        uris (Path | None, optional): Path to a file containing the list of uris to use. Defaults to None.
+
+    Raises:
+        FileNotFoundError: If the given wavs folder does not exists.
+
+    Returns:
+        tuple[list[Path], int]: list of Path to the `.wav` files to process and te length of the list
+    """
+    if not wavs.exists():
+        raise FileNotFoundError(f"Path `{wavs=}` does not exists")
+
+    # NOTE - get files and run inference
+    if uris:
+        with Path(uris).open("r") as uri_f:
+            files_to_infer_on = [
+                (wavs / uri.strip()).with_suffix(".wav") for uri in uri_f.readlines()
+            ]
+    else:
+        if recursive:
+            import warnings
+
+            warnings.warn("Search for .wav files is done recursively, might be slow.")
+
+            files_to_infer_on = list(wavs.rglob("*.wav"))
+        else:
+            files_to_infer_on = list(wavs.glob("*.wav"))
+
+    return files_to_infer_on, len(files_to_infer_on)
+
+
 def run_inference_on_audios(
     config: Path,
     uris: Path | None,
@@ -352,6 +390,7 @@ def run_inference_on_audios(
     thresholds: dict | None,
     batch_size: int,
     device: Literal["gpu", "cuda", "cpu", "mps"] = "cuda",
+    recursive: bool = False,
 ) -> list[Path]:
     """
     Returns:
@@ -362,8 +401,6 @@ def run_inference_on_audios(
     output = Path(output)
     device = "cuda" if device == "gpu" else device
 
-    if not wavs.exists():
-        raise ValueError(f"Path `{wavs=}` does not exists")
     if not checkpoint.exists():
         raise ValueError(f"Path `{checkpoint=}` does not exists")
     if thresholds:
@@ -372,6 +409,7 @@ def run_inference_on_audios(
         with Path(thresholds).open("r") as f:
             thresholds = yaml.safe_load(f)
 
+    files_to_infer_on, n_files = get_list_of_files_to_process(wavs, recursive, uris)
     config: Config = load_config(config)
 
     if "hydra" not in config.model.name:
@@ -384,16 +422,6 @@ def run_inference_on_audios(
     model.eval()
 
     model.to(torch.device(device))
-
-    # NOTE - get files and run inference
-    if uris:
-        with Path(uris).open("r") as uri_f:
-            files_to_infer_on = [
-                (wavs / uri.strip()).with_suffix(".wav") for uri in uri_f.readlines()
-            ]
-    else:
-        files_to_infer_on = list(wavs.glob("*.wav"))
-    n_files = len(files_to_infer_on)
 
     for i, audio_path in enumerate(sorted(files_to_infer_on), 1):
         print(

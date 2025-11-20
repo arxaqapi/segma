@@ -378,7 +378,7 @@ def get_list_of_files_to_process(
         else:
             files_to_infer_on = list(wavs.glob("*.wav"))
 
-    return files_to_infer_on, len(files_to_infer_on)
+    return sorted(files_to_infer_on), len(files_to_infer_on)
 
 
 def run_inference_on_audios(
@@ -423,7 +423,7 @@ def run_inference_on_audios(
 
     model.to(torch.device(device))
 
-    for i, audio_path in enumerate(sorted(files_to_infer_on), 1):
+    for i, audio_path in enumerate(files_to_infer_on, 1):
         print(
             f"[log] - ({i:>{len(str(n_files))}}/{n_files}) - running inference for file: '{audio_path.stem}'",
             flush=True,

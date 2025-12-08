@@ -5,7 +5,6 @@ description = "Minimal audio segmentation toolkit."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "asteroid-filterbanks>=0.4.0",
     "dacite>=1.9.2",
     "interlap>=0.2.7",
     "lightning>=2.4.0",
@@ -16,9 +15,9 @@ dependencies = [
     "polars>=1.22.0",
     "pyyaml>=6.0.2",
     "scipy>=1.14.1",
-    "soundfile>=0.12.1; sys_platform == 'darwin'",
-    "torch>=2.4.1",
-    "torchaudio>=2.4.1",
+    "torch>=2.9.1",
+    "torchaudio>=2.9.1",
+    "torchcodec>=0.9.0",
     "transformers>=4.47.1",
     "wandb>=0.18.3",
 ]
@@ -27,8 +26,8 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=8.3.3",
     "ruff>=0.6.9",
     "mypy>=1.11.2",

@@ -1,6 +1,7 @@
 import argparse
 from math import floor
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import torch
@@ -90,6 +91,7 @@ class Chunkyfier:
 def prepare_audio(
     audio_path: Path,
     model: BaseSegmentationModel,
+    device: Literal["cuda", "cpu", "mps"],
     start_f: int,
     end_f: int | None = None,
 ):
@@ -107,25 +109,26 @@ def prepare_audio(
     """
     num_frames = end_f - start_f if end_f else -1
     sub_audio_t = torchaudio.load(
-        uri=audio_path.resolve(),
+        uri=str(audio_path.resolve()),
         frame_offset=start_f,
         num_frames=num_frames,
     )[0]
     sub_audio_t = model.audio_preparation_hook(sub_audio_t.squeeze(1)).squeeze(0)
-    return sub_audio_t.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    return sub_audio_t.to(torch.device(device))
 
 
 def apply_model_on_audio(
     audio_path: Path,
     model: torch.nn.Module,
     conv_settings: ConvolutionSettings,
+    device: Literal["cuda", "cpu", "mps"],
     batch_size: int = 128,
     chunk_duration_s: float = 4.0,
     sample_rate: int = 16_000,
 ) -> torch.Tensor:
     """Apply model on audio, return tensor of size (n_frames, n_classes)"""
     chunk_duration_f = int(chunk_duration_s * sample_rate)
-    n_frames_audio = torchaudio.info(audio_path).num_frames
+    n_frames_audio = torchaudio.info(str(audio_path)).num_frames
 
     chunkyfier = Chunkyfier(batch_size, chunk_duration_f, conv_settings)
 
@@ -138,6 +141,7 @@ def apply_model_on_audio(
         sub_audio_t = prepare_audio(
             audio_path,
             model,
+            device=device,
             start_f=chunkyfier.batch_start_i(i),
             end_f=chunkyfier.batch_end_i_coverage(i) + chunkyfier.missing_n_frames,
         )
@@ -156,16 +160,17 @@ def apply_model_on_audio(
             out_t = model(batch_t).squeeze(2)
         logits.append(out_t)
 
-    # NOTE - Handle chunks that do not fit in a batch
+    # NOTE - Handle missing chunks that do not fit in a batch
     leftover_frames = n_frames_audio - chunkyfier.batch_end_i_coverage(
         n_full_batches - 1
     )
-    if leftover_frames:
+    if leftover_frames and leftover_frames >= chunk_duration_f:
         # ==========================================
         # NOTE - load audio section
         sub_audio_t = prepare_audio(
             audio_path,
             model,
+            device=device,
             start_f=chunkyfier.batch_start_i(n_full_batches),
             end_f=chunkyfier.chunk_start_i(
                 n_full_batches * batch_size
@@ -184,15 +189,17 @@ def apply_model_on_audio(
             out_t = model(batch_t)
         logits.append(out_t)
 
+    # NOTE - Handle missing frames that do not fit in a chunk
+    last_start_position = chunkyfier.chunk_start_i(
+        n_full_batches * batch_size + chunkyfier.get_n_fitting_chunks(leftover_frames)
+    )
+    if n_frames_audio - last_start_position > chunkyfier.cnn_settings.rf_step:
         # ==========================================
-        # NOTE - handle frames that do not fit in a chunk
         last_audio_t = prepare_audio(
             audio_path,
             model,
-            start_f=chunkyfier.chunk_start_i(
-                n_full_batches * batch_size
-                + chunkyfier.get_n_fitting_chunks(leftover_frames)
-            ),
+            device=device,
+            start_f=last_start_position,
         )
         # NOTE - pass through model
         with torch.inference_mode():
@@ -206,7 +213,9 @@ def apply_model_on_audio(
 
 
 def apply_thresholds(
-    feature_tensor: torch.Tensor, thresholds: dict[str, dict[str, float]]
+    feature_tensor: torch.Tensor,
+    thresholds: dict[str, dict[str, float]],
+    device: Literal["cuda", "cpu", "mps"],
 ) -> torch.Tensor:
     """Given raw logits, perform thresholding.
 
@@ -221,7 +230,7 @@ def apply_thresholds(
     assert feature_tensor.shape[-1] == len(thresholds)
     threshold_tensor = torch.tensor(
         [label["lower_bound"] for label in thresholds.values()]
-    ).to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    ).to(torch.device(device))
 
     return feature_tensor > threshold_tensor
 
@@ -281,7 +290,9 @@ def infer_file(
     output_p: Path,
     config: Config,
     batch_size: int,
+    device: Literal["cuda", "cpu", "mps"],
     thresholds: None | dict = None,
+    save_logits: bool = False,
 ):
     """Apply the model on the audio in a streaming fashion to ensure memory integrity,
     threshold the features, retrieve the intervals and write them to disk.
@@ -315,11 +326,25 @@ def infer_file(
         batch_size=batch_size,
         chunk_duration_s=config.audio.chunk_duration_s,
         conv_settings=inference_settings,
+        device=device,
     )
+
+    # NOTE - save logits to disk
+    # logits_t: (n_frames, n_labels)
+    if save_logits:
+        logits_out_p = output_p / "logits"
+        logits_out_p.mkdir(parents=True, exist_ok=True)
+        torch.save(
+            {
+                model.label_encoder.inv_transform(i): logits_t[i]
+                for i in range(model.label_encoder.n_labels)
+            },
+            f"{logits_out_p}/{audio_path.stem}-logits_dict_t.pt",
+        )
 
     # NOTE - apply tresholding
     thresholded_features = (
-        apply_thresholds(logits_t, thresholds=thresholds).detach().cpu()
+        apply_thresholds(logits_t, thresholds=thresholds, device=device).detach().cpu()
     )
 
     # NOTE - create intervals
@@ -333,42 +358,24 @@ def infer_file(
     write_intervals(intervals=intervals, audio_path=audio_path, output_p=output_p)
 
 
-def run_inference_on_audios(
-    config: Path,
-    uris: Path | None,
-    wavs: Path,
-    checkpoint: Path,
-    output: Path,
-    thresholds: dict | None,
-    batch_size: int,
-):
-    wavs = Path(wavs)
-    checkpoint = Path(checkpoint)
-    output = Path(output)
+def get_list_of_files_to_process(
+    wavs: Path, recursive: bool = False, uris: Path | None = None
+) -> tuple[list[Path], int]:
+    """Get list of files to process.
 
+    Args:
+        wavs (Path): Path to the folder containing the `.wav` files.
+        recursive (bool, optional): Recursively search for `.wav` files. Might be slow. Defaults to False.
+        uris (Path | None, optional): Path to a file containing the list of uris to use. Defaults to None.
+
+    Raises:
+        FileNotFoundError: If the given wavs folder does not exists.
+
+    Returns:
+        tuple[list[Path], int]: list of Path to the `.wav` files to process and te length of the list
+    """
     if not wavs.exists():
-        raise ValueError(f"Path `{wavs=}` does not exists")
-    if not checkpoint.exists():
-        raise ValueError(f"Path `{checkpoint=}` does not exists")
-    if thresholds:
-        if not Path(thresholds).exists():
-            raise ValueError("Path to a valid threshold dict does not exist.")
-        with Path(thresholds).open("r") as f:
-            thresholds = yaml.safe_load(f)
-
-    config: Config = load_config(config)
-
-    if "hydra" not in config.model.name:
-        raise ValueError("only MultiLabelEncoder is supported")
-    l_encoder = MultiLabelEncoder(labels=config.data.classes)
-
-    model = Models[config.model.name].load_from_checkpoint(
-        checkpoint_path=checkpoint, label_encoder=l_encoder, config=config
-    )
-    model.eval()
-
-    model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-    # model = torch.compile(model)
+        raise FileNotFoundError(f"Path `{wavs=}` does not exists")
 
     # NOTE - get files and run inference
     if uris:
@@ -377,10 +384,62 @@ def run_inference_on_audios(
                 (wavs / uri.strip()).with_suffix(".wav") for uri in uri_f.readlines()
             ]
     else:
-        files_to_infer_on = sorted(list(wavs.glob("*.wav")))
-    n_files = len(files_to_infer_on)
+        if recursive:
+            import warnings
 
-    for i, audio_path in enumerate(sorted(files_to_infer_on), 1):
+            warnings.warn("Search for .wav files is done recursively, might be slow.")
+
+            files_to_infer_on = list(wavs.rglob("*.wav"))
+        else:
+            files_to_infer_on = list(wavs.glob("*.wav"))
+
+    return sorted(files_to_infer_on), len(files_to_infer_on)
+
+
+def run_inference_on_audios(
+    config: Path,
+    uris: Path | None,
+    wavs: Path,
+    checkpoint: Path,
+    output: Path,
+    thresholds: dict | None,
+    batch_size: int,
+    device: Literal["gpu", "cuda", "cpu", "mps"] = "cuda",
+    recursive: bool = False,
+    save_logits: bool = False,
+) -> list[Path]:
+    """
+    Returns:
+        list[Path]: List of file paths on which inference was performed
+    """
+    wavs = Path(wavs)
+    checkpoint = Path(checkpoint)
+    output = Path(output)
+    device = "cuda" if device == "gpu" else device
+
+    if not checkpoint.exists():
+        raise ValueError(f"Path `{checkpoint=}` does not exists")
+    if thresholds:
+        if not Path(thresholds).exists():
+            raise ValueError("Path to a valid threshold dict does not exist.")
+        with Path(thresholds).open("r") as f:
+            thresholds = yaml.safe_load(f)
+
+    files_to_infer_on, n_files = get_list_of_files_to_process(wavs, recursive, uris)
+    config: Config = load_config(config)
+
+    if "hydra" not in config.model.name:
+        raise ValueError("only MultiLabelEncoder is supported")
+    l_encoder = MultiLabelEncoder(labels=config.data.classes)
+
+    model = Models[config.model.name].load_from_checkpoint(
+        checkpoint_path=checkpoint, label_encoder=l_encoder, config=config, train=False
+    )
+    model.eval()
+
+    model.to(torch.device(device))
+
+    for i, audio_path in enumerate(files_to_infer_on, 1):
         print(
             f"[log] - ({i:>{len(str(n_files))}}/{n_files}) - running inference for file: '{audio_path.stem}'",
             flush=True,
@@ -391,9 +450,12 @@ def run_inference_on_audios(
             model=model,
             output_p=output,
             config=config,
-            thresholds=thresholds,
             batch_size=batch_size,
+            device=device,
+            thresholds=thresholds,
+            save_logits=save_logits,
         )
+    return files_to_infer_on
 
 
 if __name__ == "__main__":
@@ -424,6 +486,12 @@ if __name__ == "__main__":
         "--batch_size",
         default=128,
         type=int,
+        help="Size of the batch used for the forward pass in the model.",
+    )
+    parser.add_argument(
+        "--device",
+        default="cuda",
+        choices=["gpu", "cuda", "cpu", "mps"],
         help="Size of the batch used for the forward pass in the model.",
     )
 

@@ -292,6 +292,7 @@ def infer_file(
     batch_size: int,
     device: Literal["cuda", "cpu", "mps"],
     thresholds: None | dict = None,
+    save_logits: bool = False,
 ):
     """Apply the model on the audio in a streaming fashion to ensure memory integrity,
     threshold the features, retrieve the intervals and write them to disk.
@@ -327,6 +328,19 @@ def infer_file(
         conv_settings=inference_settings,
         device=device,
     )
+
+    # NOTE - save logits to disk
+    # logits_t: (n_frames, n_labels)
+    if save_logits:
+        logits_out_p = output_p / "logits"
+        logits_out_p.mkdir(parents=True, exist_ok=True)
+        torch.save(
+            {
+                model.label_encoder.inv_transform(i): logits_t[i]
+                for i in range(model.label_encoder.n_labels)
+            },
+            f"{logits_out_p}/{audio_path.stem}-logits_dict_t.pt",
+        )
 
     # NOTE - apply tresholding
     thresholded_features = (
@@ -392,6 +406,7 @@ def run_inference_on_audios(
     batch_size: int,
     device: Literal["gpu", "cuda", "cpu", "mps"] = "cuda",
     recursive: bool = False,
+    save_logits: bool = False,
 ) -> list[Path]:
     """
     Returns:
@@ -438,6 +453,7 @@ def run_inference_on_audios(
             batch_size=batch_size,
             device=device,
             thresholds=thresholds,
+            save_logits=save_logits,
         )
     return files_to_infer_on
 

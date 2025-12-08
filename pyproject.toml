@@ -5,7 +5,6 @@ description = "Minimal audio segmentation toolkit."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "asteroid-filterbanks>=0.4.0",
     "dacite>=1.9.2",
     "interlap>=0.2.7",
     "lightning>=2.4.0",

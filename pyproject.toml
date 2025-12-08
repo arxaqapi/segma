@@ -15,7 +15,6 @@ dependencies = [
     "polars>=1.22.0",
     "pyyaml>=6.0.2",
     "scipy>=1.14.1",
-    "soundfile>=0.12.1; sys_platform == 'darwin'",
     "torch>=2.9.1",
     "torchaudio>=2.9.1",
     "torchcodec>=0.9.0",

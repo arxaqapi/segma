@@ -12,16 +12,19 @@ from segma.utils.conversions import frames_to_seconds
 class AudioInfo:
     sample_rate: int
     n_samples: int
+    n_channels: int
 
 
 def get_audio_info(audio_p: Path) -> AudioInfo:
     """Returns number of frames and sample rate of the audio"""
     decoder = AudioDecoder(audio_p.resolve())
+    decoder.metadata.duration
     return AudioInfo(
         n_samples=int(
             decoder.metadata.duration_seconds_from_header * decoder.metadata.sample_rate
         ),
         sample_rate=decoder.metadata.sample_rate,
+        n_channels=decoder.metadata.num_channels
     )
 
 

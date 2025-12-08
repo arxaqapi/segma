@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Literal, Self
 
 import numpy as np
-import torchaudio
 from interlap import InterLap
 from tqdm import tqdm
 
@@ -18,6 +17,7 @@ from segma.data.utils import (
     total_annotation_duration_f,
 )
 from segma.utils.conversions import frames_to_seconds
+from segma.utils.io import get_audio_info
 
 
 class DatasetNotLoadedError(Exception): ...
@@ -167,9 +167,9 @@ class SegmaFileDataset:
             durations: list[tuple[int, int]] = []
             for uri in tqdm(self.subset_to_uris[subset]):
                 uri_path = (self.wav_p / uri).with_suffix(".wav").resolve()
-                info = torchaudio.info(uri=uri_path)
+                info = get_audio_info(uri_path)
                 # NOTE - check that the audio is valid
-                if not self._validate_uri(info.num_frames, info.sample_rate):
+                if not self._validate_uri(info.n_samples, info.sample_rate):
                     uris_to_remove.add(uri)
                     continue
 
@@ -183,7 +183,7 @@ class SegmaFileDataset:
 
                 durations.append(
                     (
-                        info.num_frames,
+                        info.n_samples,
                         total_annotation_duration_f(annotations, self.sample_rate),
                     )
                 )

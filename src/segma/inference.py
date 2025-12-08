@@ -5,7 +5,6 @@ from typing import Literal
 
 import numpy as np
 import torch
-import torchaudio
 import yaml
 
 from segma.annotation import AudioAnnotation
@@ -15,6 +14,7 @@ from segma.models import Models
 from segma.models.base import BaseSegmentationModel, ConvolutionSettings
 from segma.utils.conversions import frames_to_seconds
 from segma.utils.encoders import MultiLabelEncoder
+from segma.utils.io import get_audio_info, get_samples_in_range
 
 
 class Chunkyfier:
@@ -108,11 +108,9 @@ def prepare_audio(
         _type_: _description_
     """
     num_frames = end_f - start_f if end_f else -1
-    sub_audio_t = torchaudio.load(
-        uri=str(audio_path.resolve()),
-        frame_offset=start_f,
-        num_frames=num_frames,
-    )[0]
+    sub_audio_t = get_samples_in_range(
+        audio_p=audio_path, start_f=start_f, duration_f=num_frames
+    )
     sub_audio_t = model.audio_preparation_hook(sub_audio_t.squeeze(1)).squeeze(0)
     return sub_audio_t.to(torch.device(device))
 
@@ -128,7 +126,7 @@ def apply_model_on_audio(
 ) -> torch.Tensor:
     """Apply model on audio, return tensor of size (n_frames, n_classes)"""
     chunk_duration_f = int(chunk_duration_s * sample_rate)
-    n_frames_audio = torchaudio.info(str(audio_path)).num_frames
+    n_frames_audio = get_audio_info(audio_path).n_samples
 
     chunkyfier = Chunkyfier(batch_size, chunk_duration_f, conv_settings)
 

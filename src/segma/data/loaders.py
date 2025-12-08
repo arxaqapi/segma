@@ -5,7 +5,6 @@ from typing import Callable, Generator
 import lightning as pl
 import numpy as np
 import torch
-import torchaudio
 from interlap import InterLap
 from torch.utils.data import DataLoader, IterableDataset
 
@@ -17,6 +16,7 @@ from segma.utils.conversions import (
     seconds_to_frames,
 )
 from segma.utils.encoders import LabelEncoder
+from segma.utils.io import get_samples_in_range
 
 
 class DataLoaderError(Exception): ...
@@ -205,11 +205,10 @@ class AudioSegmentationDataset(IterableDataset):
             raise ValueError(
                 f"Error in `AudioSegmentationDataset.load_audio()`: `{duration_f=}` does not match expected `{n_expected_frames}` frames."
             )
-        audio_t, _sr = torchaudio.load(
-            audio_file_p.resolve(),
-            frame_offset=start_f,
-            num_frames=duration_f,
-            backend="ffmpeg",
+        audio_t = get_samples_in_range(
+            audio_p=audio_file_p,
+            start_f=start_f,
+            duration_f=duration_f,
         )
         # Downmix to mono if necessary
         if audio_t.shape[0] > 1:

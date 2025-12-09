@@ -334,7 +334,7 @@ def infer_file(
         logits_out_p.mkdir(parents=True, exist_ok=True)
         torch.save(
             {
-                model.label_encoder.inv_transform(i): logits_t[i]
+                model.label_encoder.inv_transform(i): logits_t[:, i]
                 for i in range(model.label_encoder.n_labels)
             },
             f"{logits_out_p}/{audio_path.stem}-logits_dict_t.pt",

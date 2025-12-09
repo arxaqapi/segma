@@ -1,17 +1,33 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "optuna",
+#     "pyannote-audio",
+#     "ruamel-yaml",
+#     "segma",
+#     "torch",
+# ]
+#
+# [tool.uv.sources]
+# segma = { path = "../" }
+# ///
 import argparse
 import random
 from collections import defaultdict
 from pathlib import Path
 
 import optuna
-import yaml
+import torch
 from pyannote.audio.utils.metric import MacroAverageFMeasure
 from pyannote.core import Annotation, Segment
+from ruamel.yaml import YAML
 
 from segma.annotation import AudioAnnotation
 from segma.config.base import Config, load_config
 from segma.data.utils import load_uris
-from segma.predict import load_all_logits, predict_all_logits
+from segma.inference import apply_thresholds, create_intervals
+from segma.models.base import ConvolutionSettings
+from segma.utils.conversions import frames_to_seconds
 from segma.utils.encoders import (
     LabelEncoder,
     MultiLabelEncoder,
@@ -66,6 +82,20 @@ def aa_to_annotation(uri: str, rttms: list[AudioAnnotation]) -> Annotation:
     return annotation
 
 
+def intervals_to_aa(
+    uri: str, intervals: list[tuple[int, int, str]]
+) -> list[AudioAnnotation]:
+    return [
+        AudioAnnotation(
+            uid=uri,
+            start_time_s=float(frames_to_seconds(start_f)),
+            duration_s=float(frames_to_seconds(end_f - start_f)),
+            label=str(label),
+        )
+        for start_f, end_f, label in intervals
+    ]
+
+
 def eval_loaded_rttms(
     rttms_true: dict[str, list[AudioAnnotation]],
     rttms_pred: dict[str, list[AudioAnnotation]],
@@ -100,12 +130,64 @@ def eval_loaded_rttms(
     return abs(metric)
 
 
+def load_all_logits(
+    logits_p: Path, labels: list[str], uris_to_load: list[str] | None = None
+) -> dict[str, torch.Tensor]:
+    """Given a folder, loads all `*-logits_dict_t.pt` logit files,
+    extracts the logit values and returns a dict that maps uris to logit tensors
+    """
+    all_logits = {}
+    for logit_file in logits_p.glob("*-logits_dict_t.pt"):
+        uri = logit_file.stem.split("-logits_dict_t")[0]
+        # NOTE - only load if uri in uris_to_load
+        if uri in uris_to_load:
+            logit_dict = torch.load(logit_file, map_location="cpu")
+            all_logits[uri] = torch.stack(
+                [logit_dict[label] for label in labels], dim=1
+            )
+    return all_logits
+
+
+def apply_thresholds_to_logits(
+    logits: dict[str, torch.Tensor], thresholds: dict[str, dict[str, float]]
+) -> dict[str, torch.Tensor]:
+    return {
+        uri: apply_thresholds(logit, thresholds, device="cpu")
+        for uri, logit in logits.items()
+    }
+
+
+def infer_from_logits(
+    logits: dict[str, torch.Tensor],
+    thresholds: dict[str, dict[str, float]],
+    label_encoder: MultiLabelEncoder,
+    inference_conv_settings: ConvolutionSettings = ConvolutionSettings(
+        kernels=(320,),
+        strides=(320,),
+        paddings=(0,),
+    ),
+) -> dict[str, list[AudioAnnotation]]:
+    thresholded_logits = apply_thresholds_to_logits(logits, thresholds)
+    return {
+        uri: intervals_to_aa(
+            uri,
+            create_intervals(
+                thresholded_features=features,
+                conv_settings=inference_conv_settings,
+                label_encoder=label_encoder,
+            ),
+        )
+        for uri, features in thresholded_logits.items()
+    }
+
+
 def tune(
     logits_p: Path,
     config: Config,
     n_trials: int = 100,
     dataset_to_tune_on: Path = Path("data/baby_train"),
     sep: str = ".",
+    n_jobs: int = -1,
 ) -> optuna.trial.FrozenTrial:
     """Perform histerisis-thresholding tuning for MultiLabelSegmentation problems.
 
@@ -131,12 +213,16 @@ def tune(
     with (logits_p.parent.parent / "tune_uris.txt").open("w") as f:
         f.writelines([uri + "\n" for uri in validation_gt_rttm.keys()])
 
-    # NOTE - load all logits test set in memory
-    logits = load_all_logits(logits_p=logits_p)
-
     if "hydra" not in config.model.name:
         raise ValueError("Only `MultiLabelEncoder` is supported")
     label_encoder = MultiLabelEncoder(labels=config.data.classes)
+
+    # NOTE - load all logits test set in memory
+    logits = load_all_logits(
+        logits_p=logits_p,
+        labels=label_encoder.labels,
+        uris_to_load=set(validation_gt_rttm.keys()),
+    )
 
     def objective(trial: optuna.Trial):
         thresholds = {
@@ -150,7 +236,7 @@ def tune(
             }
             for label in label_encoder.base_labels
         }
-        predictions = predict_all_logits(
+        predictions = infer_from_logits(
             logits=logits,
             thresholds=thresholds,
             label_encoder=label_encoder,
@@ -162,18 +248,15 @@ def tune(
             label_encoder=label_encoder,
         )
 
-    # TODO - add sampler as param
     sampler = optuna.samplers.TPESampler()
     study = optuna.create_study(direction="maximize", sampler=sampler)
 
     # NOTE - create initial trial
     study.enqueue_trial(
         {f"{label}{sep}lower_bound": 0.5 for label in label_encoder.base_labels}
-        # | {f"{label}{sep}upper_bound": 1.0 for label in label_encoder.base_labels}
     )
-    print("[log] - Aaaaaaand let's tune <<|>>")
-    # TODO - add n_jobs as parameter
-    study.optimize(objective, n_trials=n_trials, n_jobs=-1)
+    print("[log] - Aaaaaaand let's tune <<|>>", flush=True)
+    study.optimize(objective, n_trials=n_trials, n_jobs=n_jobs, show_progress_bar=True)
 
     return study.best_trial
 
@@ -223,36 +306,42 @@ if __name__ == "__main__":
     parser.add_argument(
         "-c",
         "--config",
-        type=str,
+        type=Path,
         required=True,
         help="Config file to be loaded and used for inference.",
     )
     parser.add_argument(
         "--logits",
-        type=str,
+        type=Path,
         required=True,
         help="Path to logits.",
     )
     parser.add_argument(
-        "--n-trials",
         "--n_trials",
         type=int,
         default=100,
         help="Number of optuna trials to run.",
     )
     parser.add_argument(
+        "--n_jobs",
+        type=int,
+        default=1,
+        help="Number of jobs to run in parrallel. -1 selects all available cores.",
+    )
+    parser.add_argument(
         "--dataset",
         default="data/baby_train",
+        type=Path,
         help="Dataset to use for tuning, should contain a 'val.txt' files.",
     )
     parser.add_argument(
-        "--output", required=True, help="Output folder of the tuned thresholds."
+        "--output",
+        required=True,
+        type=Path,
+        help="Output folder of the tuned thresholds.",
     )
 
     args = parser.parse_args()
-    args.dataset = Path(args.dataset)
-    args.output = Path(args.output)
-    args.logits = Path(args.logits)
     args.output.mkdir(parents=True, exist_ok=True)
 
     print("[log] - starting tuning pipeline ...:)")
@@ -261,17 +350,18 @@ if __name__ == "__main__":
         config=load_config(args.config),
         n_trials=args.n_trials,
         dataset_to_tune_on=args.dataset,
+        n_jobs=args.n_jobs,
     )
 
     thresholds = optuna_out_to_threshold_d(best_trial.params)
 
-    # NOTE - fix threshnolds
+    # NOTE - fix thresholds
     thresholds = {
         label: vals | {"upper_bound": 1.0} for label, vals in thresholds.items()
     }
 
-    with (args.output / "thresholds.yml").open("w") as f:
-        yaml.safe_dump(thresholds, f)
+    yaml = YAML()
+    yaml.dump(thresholds, (args.output / "thresholds.yml"))
 
     print(
         f"[log] - found best trial with value: {best_trial.value} and parameters: \n{thresholds=}"

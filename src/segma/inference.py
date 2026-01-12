@@ -405,6 +405,7 @@ def run_inference_on_audios(
     device: Literal["gpu", "cuda", "cpu", "mps"] = "cuda",
     recursive: bool = False,
     save_logits: bool = False,
+    logger: Logger | None = None,
 ) -> list[Path]:
     """
     Returns:
@@ -438,10 +439,11 @@ def run_inference_on_audios(
     model.to(torch.device(device))
 
     for i, audio_path in enumerate(files_to_infer_on, 1):
-        print(
-            f"[log] - ({i:>{len(str(n_files))}}/{n_files}) - running inference for file: '{audio_path.stem}'",
-            flush=True,
-        )
+        s = f"({i:>{len(str(n_files))}}/{n_files}) - running inference for file: '{audio_path.stem}'"
+        if logger:
+            logger.info(s)
+        else:
+            print(f"[log] - {s}", flush=True)
 
         infer_file(
             audio_path=audio_path,

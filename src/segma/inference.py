@@ -192,7 +192,7 @@ def apply_model_on_audio(
     last_start_position = chunkyfier.chunk_start_i(
         n_full_batches * batch_size + chunkyfier.get_n_fitting_chunks(leftover_frames)
     )
-    if n_frames_audio - last_start_position > chunkyfier.cnn_settings.rf_step:
+    if n_frames_audio - last_start_position >= 400:
         # ==========================================
         last_audio_t = prepare_audio(
             audio_path,

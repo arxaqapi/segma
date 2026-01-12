@@ -270,11 +270,11 @@ def write_intervals(
 
     uri = audio_path.stem
     with (
-        (rttm_out / uri).with_suffix(".rttm").open("w") as rttm_f,
+        (rttm_out / f"{uri}.rttm").open("w") as rttm_f,
     ):
         for start_f, end_f, label in intervals:
             aa = AudioAnnotation(
-                uid=audio_path.stem,
+                uid=uri,
                 start_time_s=float(frames_to_seconds(start_f)),
                 duration_s=float(frames_to_seconds(end_f - start_f)),
                 label=str(label),

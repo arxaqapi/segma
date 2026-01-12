@@ -1,4 +1,5 @@
 import argparse
+from logging import Logger
 from math import floor
 from pathlib import Path
 from typing import Literal

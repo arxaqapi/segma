@@ -1,4 +1,5 @@
 import argparse
+from logging import Logger
 from math import floor
 from pathlib import Path
 from typing import Literal
@@ -191,7 +192,7 @@ def apply_model_on_audio(
     last_start_position = chunkyfier.chunk_start_i(
         n_full_batches * batch_size + chunkyfier.get_n_fitting_chunks(leftover_frames)
     )
-    if n_frames_audio - last_start_position > chunkyfier.cnn_settings.rf_step:
+    if n_frames_audio - last_start_position >= 400:
         # ==========================================
         last_audio_t = prepare_audio(
             audio_path,
@@ -270,11 +271,11 @@ def write_intervals(
 
     uri = audio_path.stem
     with (
-        (rttm_out / uri).with_suffix(".rttm").open("w") as rttm_f,
+        (rttm_out / f"{uri}.rttm").open("w") as rttm_f,
     ):
         for start_f, end_f, label in intervals:
             aa = AudioAnnotation(
-                uid=audio_path.stem,
+                uid=uri,
                 start_time_s=float(frames_to_seconds(start_f)),
                 duration_s=float(frames_to_seconds(end_f - start_f)),
                 label=str(label),
@@ -334,7 +335,7 @@ def infer_file(
         logits_out_p.mkdir(parents=True, exist_ok=True)
         torch.save(
             {
-                model.label_encoder.inv_transform(i): logits_t[i]
+                model.label_encoder.inv_transform(i): logits_t[:, i]
                 for i in range(model.label_encoder.n_labels)
             },
             f"{logits_out_p}/{audio_path.stem}-logits_dict_t.pt",
@@ -405,6 +406,7 @@ def run_inference_on_audios(
     device: Literal["gpu", "cuda", "cpu", "mps"] = "cuda",
     recursive: bool = False,
     save_logits: bool = False,
+    logger: Logger | None = None,
 ) -> list[Path]:
     """
     Returns:
@@ -438,10 +440,11 @@ def run_inference_on_audios(
     model.to(torch.device(device))
 
     for i, audio_path in enumerate(files_to_infer_on, 1):
-        print(
-            f"[log] - ({i:>{len(str(n_files))}}/{n_files}) - running inference for file: '{audio_path.stem}'",
-            flush=True,
-        )
+        s = f"({i:>{len(str(n_files))}}/{n_files}) - running inference for file: '{audio_path.stem}'"
+        if logger:
+            logger.info(s)
+        else:
+            print(f"[log] - {s}", flush=True)
 
         infer_file(
             audio_path=audio_path,

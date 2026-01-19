@@ -303,7 +303,7 @@ if __name__ == "__main__":
     print("[log] - Searching for optimal thresholds...")
     best_thresholds = tune_multilabel(data_t, thresholds, config.data.classes)
 
-    print(f"[log] - Best threshold found")
+    print("[log] - Best threshold found")
     pprint(best_thresholds)
 
     args.output.mkdir(parents=True, exist_ok=True)

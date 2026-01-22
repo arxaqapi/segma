@@ -22,21 +22,6 @@ class AudioAnnotation:
     label: str
     PRECISION: int = 8
 
-    @classmethod
-    def read_line(cls, line: str) -> Self:
-        """Parse a line containing space-separated values into an AudioAnnotation.
-
-        Expected format: `<uid> <start_time_s> <duration_s> <label>`
-
-        Args:
-            line (str): Input line to parse
-
-        Returns:
-            AudioAnnotation: Parsed AudioAnnotation instance.
-        """
-        uid, start_time, duration, label = line.strip().split(" ")
-        return cls(uid, float(start_time), float(duration), label)
-
     @property
     def start_time_ms(self) -> float:
         return second_to_millisecond(self.start_time_s)
@@ -65,23 +50,12 @@ class AudioAnnotation:
     def end_time_s(self) -> float:
         return self.start_time_s + self.duration_s
 
-    def write(self, n_digits: int = 8) -> str:
-        """Serialize the annotation to a space-separated string.
-
-        Args:
-            n_digits (int, optional): Number of decimal places for time values. Defaults to 6.
-
-        Returns:
-            str: Formatted string representation.
-        """
-        return f"{self.uid} {round(self.start_time_s, n_digits)} {round(self.duration_s, n_digits)} {self.label}"
-
     def __str__(self) -> str:
         """Human-readable string representation of the annotation."""
         return f"Annot for '{self.uid}': from {round(self.start_time_s, self.PRECISION)} s to {round(self.end_time_s, self.PRECISION)} | seg duration: {round(self.duration_s, self.PRECISION)} | label: {self.label}"
 
     def __repr__(self) -> str:
-        return self.write()
+        return f"{self.uid} {round(self.start_time_s, self.PRECISION)} {round(self.duration_s, self.PRECISION)} {self.label}"
 
     def to_rttm(self) -> str:
         """Convert the annotation into RTTM (Rich Transcription Time Marked) format.

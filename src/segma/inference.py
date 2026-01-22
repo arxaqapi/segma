@@ -275,7 +275,7 @@ def write_intervals(
     ):
         for start_f, end_f, label in intervals:
             aa = AudioAnnotation(
-                uid=uri,
+                uri=uri,
                 start_time_s=float(frames_to_seconds(start_f)),
                 duration_s=float(frames_to_seconds(end_f - start_f)),
                 label=str(label),

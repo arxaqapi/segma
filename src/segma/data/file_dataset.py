@@ -6,7 +6,6 @@ from typing import Literal, Self
 
 import numpy as np
 from interlap import InterLap
-from tqdm import tqdm
 
 from segma.config import Config
 from segma.data.utils import (
@@ -163,7 +162,7 @@ class SegmaFileDataset:
         uris_to_remove: set[str] = set()
         for subset in self.SUBSET_NAMES:
             durations: list[tuple[int, int]] = []
-            for uri in tqdm(self.subset_to_uris[subset]):
+            for uri in self.subset_to_uris[subset]:
                 uri_path = (self.wav_p / uri).with_suffix(".wav").resolve()
                 info = get_audio_info(uri_path)
                 # NOTE - check that the audio is valid

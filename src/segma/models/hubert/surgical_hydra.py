@@ -1,4 +1,4 @@
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
 import torch
 import torch.nn as nn
@@ -84,7 +84,7 @@ class SurgicalHydraHubert(BaseSegmentationModel):
             paddings=(0, 0, 0, 0, 0, 0, 0),
         )
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, output: Literal["tensor", "dict"] = "tensor"):
         with torch.no_grad():
             x, lengths = self.wav2vec2.feature_extractor(x, None)
         if self.config.model.config.freeze_encoder:
@@ -98,12 +98,17 @@ class SurgicalHydraHubert(BaseSegmentationModel):
             )
 
         x = self.dropout(hidden_states[-1])
-        return torch.stack([head(x) for head in self.task_heads.values()], dim=-1)
+        if output == "dict":
+            return {name: head(x) for name, head in self.task_heads.items()}
+        elif output == "tensor":
+            return torch.stack([head(x) for head in self.task_heads.values()], dim=-1)
+        else:
+            ValueError(f"Output type: {output} is not supported.")
 
     def training_step(self, batch, batch_idx):
         x = batch["x"]
         y_target = batch["y"]
-        y_pred_heads = self.forward(x)
+        y_pred_heads = self.forward(x, output="dict")
 
         # reduce first 2 dimensions (batch and windows can be merged)
         n_labels = len(self.label_encoder.labels)
@@ -137,7 +142,7 @@ class SurgicalHydraHubert(BaseSegmentationModel):
     def validation_step(self, batch, batch_idx):
         x = batch["x"]
         y_target = batch["y"]
-        y_pred_heads = self.forward(x)
+        y_pred_heads = self.forward(x, output="dict")
 
         # reduce first 2 dimensions (batch and windows can be merged)
         n_labels = len(self.label_encoder.labels)

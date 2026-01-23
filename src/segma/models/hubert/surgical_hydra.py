@@ -18,7 +18,7 @@ class SurgicalHydraHubert(BaseSegmentationModel):
         label_encoder: LabelEncoder,
         config: Config,
         weight_loss: bool = False,
-        train: bool = True,
+        train_from_scratch: bool = True,
     ) -> None:
         super().__init__(label_encoder, config, weight_loss)
         if not isinstance(label_encoder, MultiLabelEncoder):
@@ -27,7 +27,7 @@ class SurgicalHydraHubert(BaseSegmentationModel):
             )
         self.config = config
 
-        if train:
+        if train_from_scratch:
             self.wav2vec2 = load_hubert(self.config.model.config.wav_encoder)
         else:
             from torchaudio.models import hubert_pretrain_base

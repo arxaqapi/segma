@@ -7,7 +7,7 @@ from segma.annotation import AudioAnnotation
 
 
 def gen_annots(
-    uid: str,
+    uri: str,
     audio_duration_s: float = 60.0,
     labels: list[str] = ["male", "female", "key_child", "other_child"],
     max_annot_duration_s: int = 3,
@@ -31,7 +31,7 @@ def gen_annots(
 
     annotations = [
         AudioAnnotation(
-            uid=uid, start_time_s=start_s, duration_s=dur_s, label=labels[label_i]
+            uri=uri, start_time_s=start_s, duration_s=dur_s, label=labels[label_i]
         )
         for start_s, dur_s, label_i in zip(starting_points_s, durations_s, label_idxs)
     ]
@@ -96,9 +96,6 @@ def gen_classification(
     wav_out = output / "wav"
     wav_out.mkdir(parents=True, exist_ok=True)
 
-    annotations_out = output / "aa"
-    annotations_out.mkdir(parents=True, exist_ok=True)
-
     rttms_out = output / "rttm"
     rttms_out.mkdir(parents=True, exist_ok=True)
 
@@ -107,26 +104,26 @@ def gen_classification(
 
     spectro_out = output / "spectrograms"
     spectro_out.mkdir(parents=True, exist_ok=True)
-    # NOTE - 1. generate uid list
-    _uids = [str(i).rjust(4, "0") for i in range(3 * per_split)]
-    uids = {
-        split: _uids[i * per_split : (i + 1) * per_split]
+    # NOTE - 1. generate uri list
+    _uris = [str(i).rjust(4, "0") for i in range(3 * per_split)]
+    uris = {
+        split: _uris[i * per_split : (i + 1) * per_split]
         for i, split in enumerate(("train", "val", "test"))
     }
 
-    # NOTE - write uid list
-    for split, s_uids in uids.items():
+    # NOTE - write uri list
+    for split, s_uris in uris.items():
         with (output / f"{split}.txt").open("w") as f:
-            for uid in s_uids:
-                f.write(uid + "\n")
+            for uri in s_uris:
+                f.write(uri + "\n")
 
     label_to_freq = {label: 440 * i for i, label in enumerate(labels, start=1)}
 
-    for split, s_uids in uids.items():
-        for uid in s_uids:
+    for split, s_uris in uris.items():
+        for uri in s_uris:
             # NOTE - gen annotations
             annots = gen_annots(
-                uid,
+                uri,
                 audio_duration_s=audio_duration_s,
                 labels=labels,
                 # min_annot_count=15,
@@ -139,20 +136,17 @@ def gen_classification(
             )
             if gen_spectro:
                 _plot_spectro(
-                    audio[0], fig_title=str(spectro_out / f"{uid}_spectro.png")
+                    audio[0], fig_title=str(spectro_out / f"{uri}_spectro.png")
                 )
 
-            # NOTE - write wav file and annotations (.aa, .rttm, .uem)
-            wavfile.write((wav_out / uid).with_suffix(".wav"), 16_000, audio.T)
+            # NOTE - write wav file and annotations (.rttm, .uem)
+            wavfile.write((wav_out / uri).with_suffix(".wav"), 16_000, audio.T)
 
-            with (annotations_out / f"{uid}.aa").open("w") as f:
-                f.writelines([a.write() + "\n" for a in annots])
-
-            with (rttms_out / f"{uid}.rttm").open("w") as f:
+            with (rttms_out / f"{uri}.rttm").open("w") as f:
                 f.writelines([a.to_rttm() + "\n" for a in annots])
             # corresponding UEM > fixed audio duration
-            with (uems_out / f"{uid}.uem").open("w") as f:
-                f.write(f"{uid} NA 0.000 {audio_duration_s}")
+            with (uems_out / f"{uri}.uem").open("w") as f:
+                f.write(f"{uri} NA 0.000 {audio_duration_s}")
 
 
 if __name__ == "__main__":

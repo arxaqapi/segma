@@ -24,8 +24,6 @@ from segma.models import (
     Models,
     SurgicalHydraHubert,
     SurgicalWhisper,
-    Whisperidou,
-    WhisperiMax,
 )
 from segma.utils import set_seed
 from segma.utils.encoders import MultiLabelEncoder
@@ -126,9 +124,9 @@ if __name__ == "__main__":
         raise ValueError("Only `MultiLabelEncoder` is supported")
     l_encoder = MultiLabelEncoder(labels=config.data.classes)
 
-    model: (
-        Whisperidou | WhisperiMax | SurgicalWhisper | HydraWhisper | SurgicalHydraHubert
-    ) = Models[config.model.name](l_encoder, config)
+    model: SurgicalWhisper | HydraWhisper | SurgicalHydraHubert = Models[
+        config.model.name
+    ](l_encoder, config)
 
     mode, monitor = get_metric(config.train.validation_metric)
 

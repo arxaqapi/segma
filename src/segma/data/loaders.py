@@ -115,7 +115,6 @@ class AudioSegmentationDataset(IterableDataset):
             conv_settings=self.conv_settings,
             sample_rate=config.audio.sample_rate,
             chunk_duration_s=config.audio.chunk_duration_s,
-            # NOTE - strict_frames: True is pyannet - False if whisper
             strict=config.audio.strict_frames,
         )
 
@@ -163,11 +162,6 @@ class AudioSegmentationDataset(IterableDataset):
                 duration_f=durations_f,
             )
 
-            # if self.classify_sequence:
-            #    y_target = windows_to_targets(
-            #        np.asarray([[0,9216]]), self.label_encoder, self.annotations[uri_i]
-            #    )
-            # else :
             # NOTE - 4. generate corresponding sliding window 'y' vector and get labels
             windows = self.windows + start_index_f
             y_target = windows_to_targets(
@@ -276,13 +270,10 @@ def generate_frames(
     Returns:
         np.ndarray: An array of shape (n_windows, 2), where each row is [start_frame, end_frame].
     """
-    # should be 32_000 for 2s @ 16khz
-    # should be 96_000 for 6s @ 16khz
     chunk_duration_f = int(seconds_to_frames(chunk_duration_s, sample_rate))
 
     # if strict, each window will have the exact same size `rf_size(...)`,
     # else allow shorter frames that are then clipped
-    # 352 with pyannet and cds=6
     n_windows = conv_settings.n_windows(
         chunk_duration_f=chunk_duration_f, strict=strict
     )

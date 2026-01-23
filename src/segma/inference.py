@@ -275,7 +275,7 @@ def write_intervals(
     ):
         for start_f, end_f, label in intervals:
             aa = AudioAnnotation(
-                uid=uri,
+                uri=uri,
                 start_time_s=float(frames_to_seconds(start_f)),
                 duration_s=float(frames_to_seconds(end_f - start_f)),
                 label=str(label),
@@ -433,7 +433,7 @@ def run_inference_on_audios(
     l_encoder = MultiLabelEncoder(labels=config.data.classes)
 
     model = Models[config.model.name].load_from_checkpoint(
-        checkpoint_path=checkpoint, label_encoder=l_encoder, config=config, train=False
+        checkpoint_path=checkpoint, label_encoder=l_encoder, config=config, train_from_scratch=False
     )
     model.eval()
 

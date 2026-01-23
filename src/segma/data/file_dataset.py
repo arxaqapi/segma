@@ -6,7 +6,6 @@ from typing import Literal, Self
 
 import numpy as np
 from interlap import InterLap
-from tqdm import tqdm
 
 from segma.config import Config
 from segma.data.utils import (
@@ -46,8 +45,6 @@ class SegmaFileDataset:
     Format of the dataset:
     ```
     dataset_name/
-    ├── aa/
-    │   └── 0000.aa
     ├── rttm/
     │   └── 0000.rttm
     ├── uem/ (optional)
@@ -165,7 +162,7 @@ class SegmaFileDataset:
         uris_to_remove: set[str] = set()
         for subset in self.SUBSET_NAMES:
             durations: list[tuple[int, int]] = []
-            for uri in tqdm(self.subset_to_uris[subset]):
+            for uri in self.subset_to_uris[subset]:
                 uri_path = (self.wav_p / uri).with_suffix(".wav").resolve()
                 info = get_audio_info(uri_path)
                 # NOTE - check that the audio is valid
@@ -173,7 +170,7 @@ class SegmaFileDataset:
                     uris_to_remove.add(uri)
                     continue
 
-                annotations = load_annotations((self.aa_p / uri).with_suffix(".aa"))
+                annotations = load_annotations((self.rttm_p / uri).with_suffix(".rttm"))
                 # NOTE - Only labels covered in the config file are kept.
                 annotations = filter_annotations(annotations, self.classes)
 
@@ -345,10 +342,6 @@ class SegmaFileDataset:
             cache_path.rmdir()
         except:
             pass
-
-    @property
-    def aa_p(self) -> Path:
-        return self.base_p / "aa"
 
     @property
     def rttm_p(self) -> Path:

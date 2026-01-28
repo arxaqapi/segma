@@ -18,9 +18,6 @@ def _prepare_dummy_ds():
     shutil.rmtree("tests/sample/debug_5", ignore_errors=True)
     shutil.rmtree("tests/sample/debug_10", ignore_errors=True)
 
-    SegmaFileDataset.clean_cache("tests/sample/debug_5")
-    SegmaFileDataset.clean_cache("tests/sample/debug_10")
-
 
 def test_SegmaFileDataset_init(_prepare_dummy_ds):
     sfd = SegmaFileDataset(
@@ -96,7 +93,7 @@ def test_SegmaFileDataset_init_w_exclude_invalid(_prepare_dummy_ds):
     for subds, uri in zip(("train", "val", "test"), ("1000", "1001", "1002")):
         with open(f"tests/sample/{ds_to_use}/{subds}.txt", "a") as f:
             f.writelines([s + "\n" for s in (uri,)])
-            Path(f"tests/sample/{ds_to_use}/aa/{uri}.aa").touch()
+            Path(f"tests/sample/{ds_to_use}/rttm/{uri}.rttm").touch()
 
     # NOTE - gen audio >= 2 seconds
     sr = 16_000
@@ -111,7 +108,7 @@ def test_SegmaFileDataset_init_w_exclude_invalid(_prepare_dummy_ds):
         chunk_duration_s=120,
     )
 
-    sfd.load(False)
+    sfd.load()
 
     assert len(sfd.removed_uris["invalid"]) == 30
     assert len(sfd.removed_uris["invalid"]) == 30
@@ -140,33 +137,3 @@ def test_non_existant_ds():
             classes=[],
             chunk_duration_s=1,
         )
-
-
-def test_SegmaFileDataset_save_cache(_prepare_dummy_ds):
-    sfd = SegmaFileDataset(
-        "tests/sample/debug_10",
-        classes=["male", "female", "key_child", "other_child"],
-        chunk_duration_s=1.0,
-    )
-
-    sfd.load()
-
-    assert (Path(".cache/segma") / sfd.base_p / "subds_to_durations").exists()
-    assert (Path(".cache/segma") / sfd.base_p / "subds_to_interlaps").exists()
-
-
-def test_SegmaFileDataset_load_cache(_prepare_dummy_ds):
-    SegmaFileDataset(
-        "tests/sample/debug_10",
-        classes=["male", "female", "key_child", "other_child"],
-        chunk_duration_s=1.0,
-    ).load()
-
-    sfd = SegmaFileDataset(
-        "tests/sample/debug_10",
-        classes=["male", "female", "key_child", "other_child"],
-        chunk_duration_s=1.0,
-    )
-    sfd.load_cache()
-    assert sfd.subds_to_durations is not None
-    assert sfd.subds_to_interlaps is not None

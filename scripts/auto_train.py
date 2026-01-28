@@ -153,7 +153,7 @@ if __name__ == "__main__":
     print("segmafile loading")
     sfd = SegmaFileDataset.from_config(config)
 
-    sfd.load(use_cache=False)
+    sfd.load()
 
     print(
         f"[log @ {datetime.now().strftime('%Y%m%d_%H:%M:%S')}] - SegmentationDataLoader initializing ...",

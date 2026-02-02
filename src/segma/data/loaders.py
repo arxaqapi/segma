@@ -2,7 +2,7 @@ from math import ceil
 from pathlib import Path
 from typing import Callable, Generator
 
-import lightning as pl
+import lightning as L
 import numpy as np
 import torch
 from interlap import InterLap
@@ -22,8 +22,8 @@ from segma.utils.io import get_samples_in_range
 class DataLoaderError(Exception): ...
 
 
-class SegmentationDataLoader(pl.LightningDataModule):
-    """`SegmentationDataLoader` is a `pl.LightningDataModule` subclass that loads all required informations about the dataset
+class SegmentationDataLoader(L.LightningDataModule):
+    """`SegmentationDataLoader` is a `L.LightningDataModule` subclass that loads all required informations about the dataset
     and returns `AudioSegmentationDataset` (which are `IterableDataset`s) for training and validation.
 
     On initialization, the `SegmentationDataLoader` loads all uris,
@@ -63,7 +63,7 @@ class SegmentationDataLoader(pl.LightningDataModule):
             ),
             batch_size=self.config.train.batch_size,
             drop_last=True,
-            num_workers=self.config.train.dataloader.num_workers,
+            num_workers=self.config.train.dataload_num_workers,
             persistent_workers=True,
             multiprocessing_context="fork"
             if torch.backends.mps.is_available()
@@ -81,7 +81,7 @@ class SegmentationDataLoader(pl.LightningDataModule):
             ),
             batch_size=self.config.train.batch_size,
             drop_last=True,
-            num_workers=self.config.train.dataloader.num_workers,
+            num_workers=self.config.train.dataload_num_workers,
             persistent_workers=True,
             multiprocessing_context="fork"
             if torch.backends.mps.is_available()

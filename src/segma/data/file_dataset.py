@@ -95,7 +95,7 @@ class SegmaFileDataset:
     def from_config(cls, config: Config) -> Self:
         return cls(
             config.data.dataset_path,
-            config.data.classes,
+            config.data.labels,
             config.audio.chunk_duration_s,
             config.audio.sample_rate,
         )

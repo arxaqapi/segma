@@ -8,7 +8,7 @@ import torch
 from ruamel.yaml import YAML
 from tqdm import tqdm
 
-from segma.config.base import load_config
+from segma.config import load_config
 from segma.data.utils import load_uris
 
 
@@ -297,11 +297,11 @@ if __name__ == "__main__":
     data_t = get_data(
         val_true_path=args.val_ds,
         val_pred_path=args.val_logits,
-        labels=config.data.classes,
+        labels=config.data.labels,
     )
 
     print("[log] - Searching for optimal thresholds...")
-    best_thresholds = tune_multilabel(data_t, thresholds, config.data.classes)
+    best_thresholds = tune_multilabel(data_t, thresholds, config.data.labels)
 
     print("[log] - Best threshold found")
     pprint(best_thresholds)

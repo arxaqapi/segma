@@ -1,0 +1,23 @@
+[logging]
+offline = false
+project = "segma_v2"
+name = "train_VTC-2.1"
+
+[data]
+dataset_path = "/store/scratch/tkunze/data/_derivations/baby_train_u20"
+labels = ["KCHI", "OCH", "MAL", "FEM"]
+
+[audio]
+chunk_duration_s = 4
+sample_rate = 16_000
+strict_frames = false
+
+[model]
+hubert_checkpoint = "/store/scratch/tkunze/models/BabyHuBERT/checkpoint/best_babyhubert.ckpt"
+
+[train]
+learning_rate = 1.0e-05
+batch_size = 128
+max_epochs = 3
+dataload_num_workers = 24
+scheduler_patience = 3

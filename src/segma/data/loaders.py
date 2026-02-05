@@ -78,6 +78,7 @@ class SegmentationDataLoader(L.LightningDataModule):
                 conv_settings=self.conv_settings,
                 label_encoder=self.label_encoder,
                 audio_preparation_hook=self.audio_preparation_hook,
+                is_val=True,
             ),
             batch_size=self.config.train.batch_size,
             drop_last=True,
@@ -101,6 +102,7 @@ class AudioSegmentationDataset(IterableDataset):
         conv_settings: ConvolutionSettings,
         label_encoder: LabelEncoder,
         audio_preparation_hook: Callable | None = None,
+        is_val: bool = False,
     ) -> None:
         self.uris = subset.uris
         self.durations = subset.durations
@@ -110,6 +112,8 @@ class AudioSegmentationDataset(IterableDataset):
         self.conv_settings = conv_settings
         self.label_encoder = label_encoder
         self.audio_preparation_hook = audio_preparation_hook
+
+        self.is_val = is_val
 
         self.windows = generate_frames(
             conv_settings=self.conv_settings,
@@ -230,12 +234,13 @@ class AudioSegmentationDataset(IterableDataset):
         Returns:
             int: Estimated number of training samples (chunks) drawn in one epoch.
         """
+        k = 1.0 if self.is_val else self.config.data.dataset_multiplier
         # audio_duration_f, annotated_duration_f
         total_annotated_duration_s = frames_to_seconds(
             self.durations["audio_duration_f"].sum()
         )
         return int(
-            self.config.data.dataset_multiplier
+            k
             * max(
                 ceil(total_annotated_duration_s / self.config.audio.chunk_duration_s),
                 self.config.train.batch_size,

@@ -105,5 +105,5 @@ if __name__ == "__main__":
 
     # NOTE - save best
     (checkpoint_path / "best.ckpt").symlink_to(
-        Path(best_checkpoint.best_model_path).absolute()
+        Path(best_checkpoint.best_model_path).resolve()
     )

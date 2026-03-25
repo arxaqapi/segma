@@ -57,23 +57,36 @@ class AudioAnnotation:
     def __repr__(self) -> str:
         return f"{self.uri} {round(self.start_time_s, self.PRECISION)} {round(self.duration_s, self.PRECISION)} {self.label}"
 
+    @classmethod
+    def format_to_rttm(
+        self,
+        uri: str,
+        start_time_s: float,
+        duration_s: float,
+        label: str,
+        precision: int = 8,
+    ) -> str:
+        return " ".join(
+            [
+                "SPEAKER",
+                uri,
+                "1",
+                f"{round(start_time_s, precision)}",
+                f"{round(duration_s, precision)}",
+                "<NA> <NA>",
+                label,
+                "<NA> <NA>",
+            ]
+        )
+
     def to_rttm(self) -> str:
         """Convert the annotation into RTTM (Rich Transcription Time Marked) format.
 
         Returns:
             str: RTTM-formatted string for use with audio-diarization and segmentation tools.
         """
-        return " ".join(
-            [
-                "SPEAKER",
-                self.uri,
-                "1",
-                f"{round(self.start_time_s, self.PRECISION)}",
-                f"{round(self.duration_s, self.PRECISION)}",
-                "<NA> <NA>",
-                self.label,
-                "<NA> <NA>",
-            ]
+        return self.format_to_rttm(
+            self.uri, self.start_time_s, self.duration_s, self.label, self.PRECISION
         )
 
     @classmethod

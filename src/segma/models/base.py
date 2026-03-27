@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from functools import cached_property, reduce
-from math import floor, prod
+from functools import cached_property
+from math import ceil, prod
 
 
 @dataclass
@@ -104,26 +104,24 @@ class ConvolutionSettings:
         return abs(self.rf_start_i(0) - self.rf_start_i(1))
 
     def n_windows(self, chunk_duration_f: int, strict: bool = True) -> int:
-        """Compute the total number of convolution windows that can fit in a given audio chunk.
-
+        """Compute the number of sliding windows over an audio chunk.
         Args:
             chunk_duration_f (int): Duration of the audio chunk in frames.
-            strict (bool, optional):
-                If True, only count windows that fully fit within the chunk.
-                If False, allow windows that partially exceed the chunk. Defaults to True.
+            strict (bool):
+                If True (default), only count fully contained windows.
+                If False, also count partial windows at the end.
 
         Returns:
-            int: Number of valid convolution windows.
+            int: Number of valid windows. Returns 0 if the chunk is shorter than
+                the window size in strict mode.
         """
-        # Add a correction if any kernel has even size (can affect center alignment)
-        has_even_kernel = reduce(lambda b, e: b or (e % 2 == 0), self.kernels, False)
-        correction = 1 if has_even_kernel else 0
-
-        # Should be 320 (f) with duration 2 secs and whisper model
-        # Should be 270 (f) with duration 2 secs and sinc model
-        rf_step = int(self.rf_step + correction)
+        if chunk_duration_f <= 0:
+            return 0
 
         if strict:
-            return floor((chunk_duration_f - self.rf_size) / rf_step) + 1
-        else:
-            return chunk_duration_f // rf_step
+            if chunk_duration_f < self.rf_size:
+                return 0
+            # (L-W): Number of positions the window can slide from its starting point
+            return (chunk_duration_f - self.rf_size) // self.rf_step + 1
+
+        return ceil(chunk_duration_f / self.rf_step)

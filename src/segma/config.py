@@ -49,7 +49,7 @@ class TrainConfig:
 
 @dataclass(frozen=True)
 class ModelConfig:
-    hubert_checkpoint: Path
+    hubert_checkpoint: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -65,20 +65,23 @@ class Config:
         out.write_text(tomlkit.dumps(self.as_dict()))
 
     def as_dict(self):
+        # https://github.com/python-poetry/tomlkit/issues/240
         def _to_builtin(obj):
             """Recursively convert dataclass to dict with only built-in types."""
             if hasattr(obj, "__dataclass_fields__"):
                 return {
-                    k: _to_builtin(getattr(obj, k)) for k in obj.__dataclass_fields__
+                    k: _to_builtin(getattr(obj, k))
+                    for k in obj.__dataclass_fields__
+                    if getattr(obj, k) is not None
                 }
             elif isinstance(obj, Mapping):
-                return {k: _to_builtin(v) for k, v in obj.items()}
+                return {k: _to_builtin(v) for k, v in obj.items() if v is not None}
             elif (
                 isinstance(obj, (list, tuple))
                 or hasattr(obj, "__iter__")
                 and not isinstance(obj, (str, bytes))
             ):
-                return [_to_builtin(v) for v in obj]
+                return [_to_builtin(v) for v in obj if v is not None]
             elif isinstance(obj, Path):
                 return Path(obj)
             else:

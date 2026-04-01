@@ -10,7 +10,7 @@ labels = ["KCHI", "OCH", "MAL", "FEM"]
 [audio]
 chunk_duration_s = 4
 sample_rate = 16_000
-strict_frames = false
+strict_frames = true
 
 [model]
 hubert_checkpoint = "/store/scratch/tkunze/models/BabyHuBERT/checkpoint/best_babyhubert.ckpt"

@@ -1,0 +1,23 @@
+[logging]
+offline = true
+project = "test"
+name = "test config"
+tags = ["test"]
+
+[data]
+dataset_path = "tests/sample/data"
+labels = ["KCHI", "OCH", "MAL", "FEM"]
+
+[audio]
+chunk_duration_s = 4
+sample_rate = 16_000
+strict_frames = true
+
+[model]
+
+[train]
+learning_rate = 1.0e-05
+batch_size = 128
+max_epochs = 2
+dataload_num_workers = 24
+scheduler_patience = 3

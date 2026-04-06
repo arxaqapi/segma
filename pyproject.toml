@@ -10,8 +10,6 @@ dependencies = [
     "matplotlib>=3.9.2",
     "numpy>=2.1.2",
     "polars>=1.22.0",
-    "pyyaml>=6.0.2",
-    "ruamel-yaml>=0.19.1",
     "scikit-learn>=1.8.0",
     "scipy>=1.14.1",
     "tomlkit>=0.14.0",
@@ -29,17 +27,11 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "pytest>=8.3.3",
-    "mypy>=1.11.2",
-    "notebook>=7.2.2",
-    "basedpyright>=1.23.2",
     "ruff>=0.15",
 ]
 
 [tool.ruff.lint]
 ignore = ["E722"]
-
-[tool.mypy]
-exclude = ["scripts"]
 
 [tool.pytest.ini_options]
 filterwarnings = [

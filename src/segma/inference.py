@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Literal
 
 import numpy as np
+import tomlkit
 import torch
-import yaml
 
 from segma.annotation import AudioAnnotation
 from segma.config import Config, load_config
@@ -421,7 +421,7 @@ def run_inference_on_audios(
         if not Path(thresholds).exists():
             raise ValueError("Path to a valid threshold dict does not exist.")
         with Path(thresholds).open("r") as f:
-            thresholds = yaml.safe_load(f)
+            thresholds = tomlkit.load(f)
 
     files_to_infer_on, n_files = get_list_of_files_to_process(wavs, recursive, uris)
     config: Config = load_config(config)

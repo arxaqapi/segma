@@ -4,8 +4,8 @@ from pathlib import Path
 from pprint import pprint
 
 import sklearn
+import tomlkit
 import torch
-from ruamel.yaml import YAML
 from tqdm import tqdm
 
 from segma.config import load_config
@@ -228,4 +228,4 @@ if __name__ == "__main__":
     pprint(best_thresholds)
 
     args.output.mkdir(parents=True, exist_ok=True)
-    YAML().dump(best_thresholds, args.output / "best_thresholds.yml")
+    (args.output / "best_thresholds.toml").write_text(tomlkit.dumps(best_thresholds))

@@ -61,7 +61,6 @@ class Config:
     train: TrainConfig
 
     def save(self, out: Path) -> None:
-        # out.write_text(tomlkit.dumps(asdict(self)))
         out.write_text(tomlkit.dumps(self.as_dict()))
 
     def as_dict(self):

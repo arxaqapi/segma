@@ -4,7 +4,7 @@ from segma.data.utils import filter_annotations, load_annotations
 
 
 def test_load_annotations():
-    aa_p = Path("tests/sample/test.aa")
+    aa_p = Path("tests/sample/test.rttm")
 
     annots = load_annotations(aa_p)
 
@@ -12,7 +12,7 @@ def test_load_annotations():
 
 
 def test_filter_annotations_unmodified():
-    aa_p = Path("tests/sample/test.aa")
+    aa_p = Path("tests/sample/test.rttm")
 
     annots = load_annotations(aa_p)
     unmodified = filter_annotations(
@@ -23,7 +23,7 @@ def test_filter_annotations_unmodified():
 
 
 def test_filter_annotations():
-    aa_p = Path("tests/sample/test.aa")
+    aa_p = Path("tests/sample/test.rttm")
 
     annots = load_annotations(aa_p)
 
@@ -54,7 +54,7 @@ def test_filter_annotations():
 
 
 def test_filter_annotations_empty():
-    aa_p = Path("tests/sample/test.aa")
+    aa_p = Path("tests/sample/test.rttm")
 
     annots = load_annotations(aa_p)
     assert filter_annotations(annots, covered_labels=()) == []

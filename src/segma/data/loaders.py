@@ -153,7 +153,9 @@ class AudioSegmentationDataset(IterableDataset):
             start_index_f = int(
                 rng.integers(
                     low=0,
-                    high=self.durations["audio_duration_f"][uri_i] - durations_f,
+                    high=max(
+                        1, self.durations["audio_duration_f"][uri_i] - durations_f
+                    ),
                 )
             )
             # NOTE - 3. {'x': cropped audio from [start_idx: start_idx + duration]

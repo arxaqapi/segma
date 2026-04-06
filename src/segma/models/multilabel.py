@@ -29,7 +29,7 @@ class MultiLabelModel(L.LightningModule):
             "monitor": "val/loss",
         }
 
-    def training_step(self, batch, batch_idx):
+    def _step(self, batch, batch_idx):
         x = batch["x"]
         y_target = batch["y"]
         y_pred_heads = self.forward(x, output="dict")
@@ -40,6 +40,13 @@ class MultiLabelModel(L.LightningModule):
         # (batch * n_windows) - flattened, usefull when slicing target vector at the end
         y_preds = {k: y_pred.view(-1) for k, y_pred in y_pred_heads.items()}
 
+        for k, y_pred in y_preds.items():
+            if y_pred.shape != y_target[:, 0].shape:
+                raise ValueError(
+                    f"Shapes do not match between target and predicted tensors ({k} head):\ntarget shape: ({y_target.shape})\npred shape: ({y_pred.shape})"
+                )
+
+        # NOTE - loss computation
         head_losses = {
             k: torch.nn.functional.binary_cross_entropy_with_logits(
                 input=y_pred, target=y_target[..., i]
@@ -48,6 +55,10 @@ class MultiLabelModel(L.LightningModule):
         }
 
         loss = torch.stack(list(head_losses.values())).sum()
+        return loss, head_losses, y_target, y_preds
+
+    def training_step(self, batch, batch_idx):
+        loss, head_losses, _, _ = self._step(batch, batch_idx)
         self.log(
             "train/loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
         )
@@ -63,26 +74,7 @@ class MultiLabelModel(L.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x = batch["x"]
-        y_target = batch["y"]
-        y_pred_heads = self.forward(x, output="dict")
-
-        # reduce first 2 dimensions (batch and windows can be merged)
-        n_labels = len(self.model.label_encoder.labels)
-
-        y_target = y_target.view(-1, n_labels)
-        # (batch * n_windows) - flattened, usefull when slicing target vector at the end
-        y_preds = {k: y_pred.view(-1) for k, y_pred in y_pred_heads.items()}
-
-        # NOTE - loss computation
-        head_losses = {
-            k: torch.nn.functional.binary_cross_entropy_with_logits(
-                input=y_pred, target=y_target[..., i]
-            )
-            for i, (k, y_pred) in enumerate(y_preds.items())
-        }
-
-        loss = torch.stack(list(head_losses.values())).sum()
+        loss, head_losses, y_target, y_preds = self._step(batch, batch_idx)
         self.log(
             "val/loss",
             loss,

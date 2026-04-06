@@ -9,7 +9,6 @@ from segma.models.hubert.utils import checkpoint_to_hubert_base_model
 from segma.utils.encoders import MultiLabelEncoder
 
 
-# NOTE - Heavily copied from whisper/hydra.py
 class VTC2(nn.Module):
     def __init__(
         self,
@@ -44,7 +43,8 @@ class VTC2(nn.Module):
         with torch.no_grad():
             # (batch_size, 199, 512)
             x, lengths = self.encoder.feature_extractor(x, None)
-            # (batch_size, 199, 768)
+            # (batch_size, 199, 768): 4s
+            # (batch_size, 749, 512): 15s
         hidden_states = self.encoder.encoder.extract_features(
             x, lengths, num_layers=None
         )

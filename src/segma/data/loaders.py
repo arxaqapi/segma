@@ -46,8 +46,6 @@ class SegmentationDataLoader(L.LightningDataModule):
         self.conv_settings = conv_settings
         self.audio_preparation_hook = audio_preparation_hook
 
-        self.rng = np.random.default_rng()
-
         # NOTE - load dataset
         if not dataset.is_loaded():
             dataset.load()

@@ -9,10 +9,9 @@ import torch
 import yaml
 
 from segma.annotation import AudioAnnotation
-from segma.config import load_config
-from segma.config.base import Config
-from segma.models import Models
-from segma.models.base import BaseSegmentationModel, ConvolutionSettings
+from segma.config import Config, load_config
+from segma.models import VTC2, MultiLabelModel
+from segma.models.base import ConvolutionSettings
 from segma.utils.conversions import frames_to_seconds
 from segma.utils.encoders import MultiLabelEncoder
 from segma.utils.io import get_audio_info, get_samples_in_range
@@ -26,12 +25,15 @@ class Chunkyfier:
         self.chunk_duration_f = chunk_duration_f
         self.batch_size = batch_size
 
-        self.n_windows = self.cnn_settings.n_windows(self.chunk_duration_f, strict=True)
+        # FIXME - needed since we use kernel=320 & padding=320
+        self.n_windows = (
+            self.cnn_settings.n_windows(self.chunk_duration_f, strict=True) - 1
+        )
         self.missing_n_frames = (
             self.chunk_duration_f - self.n_windows * self.cnn_settings.rf_step
         )
 
-        assert self.n_windows == 199
+        assert self.n_windows == int(int(self.chunk_duration_f) / (0.02 * 16_000) - 1)
         assert self.missing_n_frames == 320
 
     def chunk_start_i(self, i: int) -> int:
@@ -91,7 +93,6 @@ class Chunkyfier:
 
 def prepare_audio(
     audio_path: Path,
-    model: BaseSegmentationModel,
     device: Literal["cuda", "cpu", "mps"],
     start_f: int,
     end_f: int | None = None,
@@ -101,7 +102,6 @@ def prepare_audio(
 
     Args:
         audio_path (Path): Path to the audio file to load.
-        model (BaseSegmentationModel): model to use.
         start_f (int): start index in the audio to start loading from.
         end_f (int | None, optional): end index in the audio to end loading from. Defaults to None.
 
@@ -112,7 +112,7 @@ def prepare_audio(
     sub_audio_t = get_samples_in_range(
         audio_p=audio_path, start_f=start_f, duration_f=num_frames
     )
-    sub_audio_t = model.audio_preparation_hook(sub_audio_t.squeeze(1)).squeeze(0)
+    sub_audio_t = sub_audio_t.squeeze(1).squeeze(0)
     return sub_audio_t.to(torch.device(device))
 
 
@@ -121,8 +121,8 @@ def apply_model_on_audio(
     model: torch.nn.Module,
     conv_settings: ConvolutionSettings,
     device: Literal["cuda", "cpu", "mps"],
+    chunk_duration_s: float,
     batch_size: int = 128,
-    chunk_duration_s: float = 4.0,
     sample_rate: int = 16_000,
 ) -> torch.Tensor:
     """Apply model on audio, return tensor of size (n_frames, n_classes)"""
@@ -139,7 +139,6 @@ def apply_model_on_audio(
         # NOTE - load audio section
         sub_audio_t = prepare_audio(
             audio_path,
-            model,
             device=device,
             start_f=chunkyfier.batch_start_i(i),
             end_f=chunkyfier.batch_end_i_coverage(i) + chunkyfier.missing_n_frames,
@@ -167,8 +166,7 @@ def apply_model_on_audio(
         # ==========================================
         # NOTE - load audio section
         sub_audio_t = prepare_audio(
-            audio_path,
-            model,
+            audio_path=audio_path,
             device=device,
             start_f=chunkyfier.batch_start_i(n_full_batches),
             end_f=chunkyfier.chunk_start_i(
@@ -195,8 +193,7 @@ def apply_model_on_audio(
     if n_frames_audio - last_start_position >= 400:
         # ==========================================
         last_audio_t = prepare_audio(
-            audio_path,
-            model,
+            audio_path=audio_path,
             device=device,
             start_f=last_start_position,
         )
@@ -285,7 +282,7 @@ def write_intervals(
 
 def infer_file(
     audio_path: Path,
-    model: BaseSegmentationModel,
+    model: torch.nn.Module,
     output_p: Path,
     config: Config,
     batch_size: int,
@@ -298,7 +295,7 @@ def infer_file(
 
     Args:
         audio_path (Path): Path to the audio to process.
-        model (BaseSegmentationModel): model used to perform inference.
+        model (torch.nn.Module): model used to perform inference.
         output_p (Path): output Path that will contain the detections.
         config (Config): config file of the model.
         batch_size (int): batch size to use for the forward pass.
@@ -401,14 +398,15 @@ def run_inference_on_audios(
     wavs: Path,
     checkpoint: Path,
     output: Path,
-    thresholds: dict | None,
+    thresholds: Path | None,
     batch_size: int,
     device: Literal["gpu", "cuda", "cpu", "mps"] = "cuda",
     recursive: bool = False,
     save_logits: bool = False,
     logger: Logger | None = None,
 ) -> list[Path]:
-    """
+    """Loads a list of audio files and perform inference on them.
+
     Returns:
         list[Path]: List of file paths on which inference was performed
     """
@@ -428,12 +426,18 @@ def run_inference_on_audios(
     files_to_infer_on, n_files = get_list_of_files_to_process(wavs, recursive, uris)
     config: Config = load_config(config)
 
-    if "hydra" not in config.model.name:
-        raise ValueError("only MultiLabelEncoder is supported")
-    l_encoder = MultiLabelEncoder(labels=config.data.classes)
+    l_encoder = MultiLabelEncoder(labels=config.data.labels)
 
-    model = Models[config.model.name].load_from_checkpoint(
-        checkpoint_path=checkpoint, label_encoder=l_encoder, config=config, train_from_scratch=False
+    # FIXME - not ideal, MultiLabelModel should be used only for training ...
+    model = MultiLabelModel(
+        VTC2(
+            label_encoder=l_encoder,
+            config=config.model,
+        ),
+        train_config=config.train,
+    )
+    model.load_state_dict(
+        torch.load(checkpoint, map_location="cpu", weights_only=False)["state_dict"]
     )
     model.eval()
 
@@ -463,7 +467,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--config",
-        type=str,
+        type=Path,
         required=True,
         help="Config file to be loaded and used for inference.",
     )
@@ -471,16 +475,19 @@ if __name__ == "__main__":
     parser.add_argument("--wavs", required=True, default="data/debug/wav")
     parser.add_argument(
         "--checkpoint",
+        type=Path,
         default="models/last/best.ckpt",
         help="Path to a pretrained model checkpoint.",
     )
     parser.add_argument(
         "--output",
+        type=Path,
         required=True,
         help="Output Path to the folder that will contain the final predictions.",
     )
     parser.add_argument(
         "--thresholds",
+        type=Path,
         help="Path to a threshold dict, perform predictions using these threshols, otherwise use default value of .5.",
     )
     parser.add_argument(

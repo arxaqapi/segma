@@ -11,10 +11,9 @@ def checkpoint_to_hubert_base_model(
     """The model was trained and saved using `hubert_pretrain_base` which contains
     specific state for the training part, that we remove here.
     """
-    checkpoint_path = Path(checkpoint_path)
     if checkpoint_path is None:
         return hubert_base()
-    if not checkpoint_path.exists():
+    if not Path(checkpoint_path).exists():
         raise FileNotFoundError("Please provide a valid path to a checkpoint.")
 
     model = hubert_base()

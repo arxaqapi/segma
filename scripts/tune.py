@@ -182,7 +182,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config",
         type=Path,
-        default=Path("src/segma/config/default.yml"),
         help="Config file to be loaded and used for inference.",
     )
     parser.add_argument("--precision", type=float, default=0.1)

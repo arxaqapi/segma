@@ -444,7 +444,14 @@ def run_inference_on_audios(
     model.to(torch.device(device))
 
     for i, audio_path in enumerate(files_to_infer_on, 1):
-        s = f"({i:>{len(str(n_files))}}/{n_files}) - running inference for file: '{audio_path.stem}'"
+        cur_iter = f"({i:>{len(str(n_files))}}/{n_files})"
+        if (output / "raw_rttm" / f"{audio_path.stem}.rttm").exists():
+            logger.info(
+                f"{cur_iter} - File: '{audio_path.stem}' already processed, skipping"
+            )
+            continue
+
+        s = f"{cur_iter} - running inference for file: '{audio_path.stem}'"
         if logger:
             logger.info(s)
         else:

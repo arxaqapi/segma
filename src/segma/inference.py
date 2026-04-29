@@ -443,6 +443,7 @@ def run_inference_on_audios(
 
     model.to(torch.device(device))
 
+    processed_files = []
     for i, audio_path in enumerate(files_to_infer_on, 1):
         cur_iter = f"({i:>{len(str(n_files))}}/{n_files})"
         if (output / "raw_rttm" / f"{audio_path.stem}.rttm").exists():
@@ -456,18 +457,23 @@ def run_inference_on_audios(
             logger.info(s)
         else:
             print(f"[log] - {s}", flush=True)
-
-        infer_file(
-            audio_path=audio_path,
-            model=model,
-            output_p=output,
-            config=config,
-            batch_size=batch_size,
-            device=device,
-            thresholds=thresholds,
-            save_logits=save_logits,
-        )
-    return files_to_infer_on
+        try:
+            infer_file(
+                audio_path=audio_path,
+                model=model,
+                output_p=output,
+                config=config,
+                batch_size=batch_size,
+                device=device,
+                thresholds=thresholds,
+                save_logits=save_logits,
+            )
+            processed_files.append(audio_path)
+        except Exception as _:
+            logger.error(
+                f"{cur_iter} - File {audio_path.stem} could not be processed, skipping"
+            )
+    return processed_files
 
 
 if __name__ == "__main__":

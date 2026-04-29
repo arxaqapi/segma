@@ -144,6 +144,8 @@ def tune_multilabel(
     ...
 
     """
+    decimals = int(math.log10(len(thresholds))) + 1
+
     labels_to_thresh_to_score = {label: {} for label in labels}
     for thresh in tqdm(thresholds):
         f1_score = sklearn.metrics.f1_score(
@@ -168,7 +170,7 @@ def tune_multilabel(
                         key=labels_to_thresh_to_score[label].get,
                     )
                 ),
-                int(math.log10(n_steps)),
+                decimals,
             ),
             "upper_bound": 1.0,
         }
@@ -206,12 +208,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     config = load_config(args.config)
 
-    assert args.precision in (0.1, 0.01)
+    assert args.precision in (0.1, 0.01, 0.001)
 
     n_steps = int(1 / args.precision)
-    thresholds = torch.linspace(0, 1, steps=n_steps).round(
-        decimals=int(math.log10(n_steps))
-    )
+    thresholds = torch.linspace(0, 1, steps=n_steps + 1)[1:-1]
 
     print("[log] - Loading data...")
     data_t = get_data(

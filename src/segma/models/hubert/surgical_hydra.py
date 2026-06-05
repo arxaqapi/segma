@@ -18,8 +18,13 @@ class VTC2(nn.Module):
         super().__init__()
         self.config = config
         self.label_encoder = label_encoder
-
-        self.encoder = checkpoint_to_hubert_base_model(self.config.hubert_checkpoint)
+        self.hidden_dim = 768
+        self.large = False
+        if self.config.model_id is not None:
+            self.large = True
+            self.hidden_dim = 1024
+        
+        self.encoder = checkpoint_to_hubert_base_model(self.config.model_checkpoint, large=self.large)   
 
         # NOTE - freeze CNN encoder
         for p in self.encoder.feature_extractor.parameters():
@@ -28,7 +33,7 @@ class VTC2(nn.Module):
         self.dropout = nn.Dropout()
         self.task_heads = nn.ModuleDict(
             {
-                f"linear_head_{label}": nn.Linear(in_features=768, out_features=1)
+                f"linear_head_{label}": nn.Linear(in_features=self.hidden_dim, out_features=1)
                 for label in label_encoder.base_labels
             }
         )

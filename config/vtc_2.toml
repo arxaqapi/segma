@@ -13,8 +13,8 @@ sample_rate = 16_000
 strict_frames = true
 
 [model]
-hubert_checkpoint = "/store/scratch/tkunze/models/BabyHuBERT/checkpoint/best_babyhubert.ckpt"
-
+model_id = "hubert_large" # or "W2V4300LL", comment for hubert_base and BabyHuBERT
+#model_checkpoint = "/store/scratch/tcharlot/models/wav2vec2_ll4300_torchaudio.pt"
 [train]
 learning_rate = 1.0e-05
 batch_size = 128

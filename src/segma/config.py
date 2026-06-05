@@ -49,7 +49,8 @@ class TrainConfig:
 
 @dataclass(frozen=True)
 class ModelConfig:
-    hubert_checkpoint: Path | None = None
+    model_checkpoint: Path | None = None
+    model_id: str | None = None
 
 
 @dataclass(frozen=True)

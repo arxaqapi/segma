@@ -15,8 +15,7 @@ strict_frames = true
 
 # vtc2, hubert_base, hubert_large, w2v2-ll4300
 [model]
-model_id = "vtc2" 
-model_checkpoint = "models/best_babyhubert.ckpt"
+model_id = "hubert_large" 
 
 [train]
 learning_rate = 1.0e-05

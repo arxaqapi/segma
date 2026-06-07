@@ -10,7 +10,7 @@ import torch
 
 from segma.annotation import AudioAnnotation
 from segma.config import Config, load_config
-from segma.models import VTC2, MultiLabelModel
+from segma.models import MultiLabelModel, model_resolver
 from segma.models.base import ConvolutionSettings
 from segma.utils.conversions import frames_to_seconds
 from segma.utils.encoders import MultiLabelEncoder
@@ -301,6 +301,8 @@ def infer_file(
         batch_size (int): batch size to use for the forward pass.
         thresholds (None | dict, optional): threshold dict to use. Defaults to None.
     """
+    assert not model.training
+
     if thresholds is None:
         thresholds = {
             label: {
@@ -430,7 +432,7 @@ def run_inference_on_audios(
 
     # FIXME - not ideal, MultiLabelModel should be used only for training ...
     model = MultiLabelModel(
-        VTC2(
+        model_resolver(config.model)(
             label_encoder=l_encoder,
             config=config.model,
         ),

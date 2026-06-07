@@ -14,7 +14,7 @@ from lightning.pytorch.loggers import WandbLogger
 
 from segma.config import load_config
 from segma.data import SegmaFileDataset, SegmentationDataLoader
-from segma.models import VTC2, MultiLabelModel
+from segma.models import MultiLabelModel, model_resolver
 from segma.utils import set_seed
 from segma.utils.encoders import MultiLabelEncoder
 
@@ -36,7 +36,8 @@ if __name__ == "__main__":
 
     # instantiate model
     ml_encoder = MultiLabelEncoder(config.data.labels)
-    model = MultiLabelModel(VTC2(ml_encoder, config.model), config.train)
+    model_c = model_resolver(config.model)
+    model = MultiLabelModel(model_c(ml_encoder, config.model), config.train)
 
     # load data
     sfd = SegmaFileDataset.from_config(config)

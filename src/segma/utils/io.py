@@ -20,10 +20,10 @@ def get_audio_info(audio_p: Path) -> AudioInfo:
     decoder = AudioDecoder(audio_p.resolve())
     return AudioInfo(
         n_samples=int(
-            decoder.metadata.duration_seconds_from_header * decoder.metadata.sample_rate
+            decoder.metadata.duration_seconds_from_header * decoder.metadata.sample_rate  # ty: ignore[possibly-missing-attribute]
         ),
-        sample_rate=decoder.metadata.sample_rate,
-        n_channels=decoder.metadata.num_channels,
+        sample_rate=decoder.metadata.sample_rate,  # ty: ignore[possibly-missing-attribute]
+        n_channels=decoder.metadata.num_channels,  # ty: ignore[possibly-missing-attribute]
     )
 
 

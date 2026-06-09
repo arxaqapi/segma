@@ -39,7 +39,7 @@ def load_annotations(aa_file_p: Path) -> list[AudioAnnotation]:
         list[AudioAnnotation]: A list of parsed `AudioAnnotation` objects.
     """
     with aa_file_p.open("r") as f:
-        return [AudioAnnotation.read_line(line) for line in f.readlines()]
+        return [AudioAnnotation.from_rttm(line) for line in f.readlines()]
 
 
 def filter_annotations(

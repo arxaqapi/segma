@@ -1,74 +1,32 @@
-from typing import Any, Mapping
+from typing import Literal
 
 import torch
 import torch.nn as nn
-from torchmetrics.functional.classification import binary_f1_score
 
-from segma.config.base import Config
-from segma.models.base import BaseSegmentationModel, ConvolutionSettings
-from segma.utils.encoders import LabelEncoder, MultiLabelEncoder
+from segma.config import ModelConfig
+from segma.models.base import ConvolutionSettings
+from segma.models.hubert.utils import (
+    checkpoint_to_hubert_base_model,
+    load_pretrained_hubert_for_finetuning,
+)
+from segma.utils.encoders import MultiLabelEncoder
 
-from .utils import load_hubert
 
-
-# NOTE - Heavily copied from whisper/hydra.py
-class SurgicalHydraHubert(BaseSegmentationModel):
+class VTC2(nn.Module):
     def __init__(
         self,
-        label_encoder: LabelEncoder,
-        config: Config,
-        weight_loss: bool = False,
-        train: bool = True,
+        label_encoder: MultiLabelEncoder,
+        config: ModelConfig,
     ) -> None:
-        super().__init__(label_encoder, config, weight_loss)
-        if not isinstance(label_encoder, MultiLabelEncoder):
-            raise ValueError(
-                "Only MultiLabelEncoder is accepted for SurgicalHydraHubert."
-            )
+        super().__init__()
         self.config = config
+        self.label_encoder = label_encoder
 
-        if train:
-            self.wav2vec2 = load_hubert(self.config.model.config.wav_encoder)
-        else:
-            from torchaudio.models import hubert_pretrain_base
-
-            model = hubert_pretrain_base(num_classes=500)
-            self.wav2vec2 = model.wav2vec2
+        self.encoder = checkpoint_to_hubert_base_model(self.config.model_checkpoint)
 
         # NOTE - freeze CNN encoder
-        for p in self.wav2vec2.feature_extractor.parameters():
+        for p in self.encoder.feature_extractor.parameters():
             p.requires_grad = False
-
-        # NOTE - freeze transformer encoder, opt.
-        if config.model.config.freeze_encoder:
-            for p in self.wav2vec2.parameters():
-                p.requires_grad = False
-
-        if (
-            config.model.config.encoder_layers is None
-            or len(config.model.config.encoder_layers) == 0
-        ):
-            self.enc_layers_to_use = list(
-                range(len(self.wav2vec2.encoder.transformer.layers))
-            )
-        else:
-            self.enc_layers_to_use = sorted(
-                [i - 1 for i in config.model.config.encoder_layers]
-            )
-        # reduction mechanism - learnable or non-learnable weights
-        if config.model.config.reduction == "weighted":
-            self.layer_weights = nn.Parameter(
-                torch.ones(len(self.enc_layers_to_use)) / len(self.enc_layers_to_use)
-            )
-        elif config.model.config.reduction == "average":
-            self.register_buffer(
-                "layer_weights",
-                torch.ones(len(self.enc_layers_to_use)) / len(self.enc_layers_to_use),
-            )
-        else:
-            raise ValueError(
-                f"Should not happen, `{self.config.model.config.reduction=}` should be `average` or `weighted`"
-            )
 
         self.dropout = nn.Dropout()
         self.task_heads = nn.ModuleDict(
@@ -84,133 +42,90 @@ class SurgicalHydraHubert(BaseSegmentationModel):
             paddings=(0, 0, 0, 0, 0, 0, 0),
         )
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, output: Literal["tensor", "dict"] = "tensor"):
         with torch.no_grad():
-            x, lengths = self.wav2vec2.feature_extractor(x, None)
-        if self.config.model.config.freeze_encoder:
-            with torch.no_grad():
-                hidden_states = self.wav2vec2.encoder.extract_features(
-                    x, lengths, num_layers=None
-                )
-        else:
-            hidden_states = self.wav2vec2.encoder.extract_features(
-                x, lengths, num_layers=None
-            )
+            # (batch_size, 199, 512)
+            x, lengths = self.encoder.feature_extractor(x, None)
+            # (batch_size, 199, 768): 4s
+            # (batch_size, 749, 512): 15s
+        hidden_states = self.encoder.encoder.extract_features(
+            x, lengths, num_layers=None
+        )
 
         x = self.dropout(hidden_states[-1])
-        return torch.stack([head(x) for head in self.task_heads.values()], dim=-1)
+        if output == "dict":
+            return {name: head(x) for name, head in self.task_heads.items()}
+        elif output == "tensor":
+            return torch.stack([head(x) for head in self.task_heads.values()], dim=-1)
+        else:
+            raise ValueError(f"Output type: {output} is not supported.")
 
-    def training_step(self, batch, batch_idx):
-        x = batch["x"]
-        y_target = batch["y"]
-        y_pred_heads = self.forward(x)
 
-        # reduce first 2 dimensions (batch and windows can be merged)
-        n_labels = len(self.label_encoder.labels)
-        y_target = y_target.view(-1, n_labels)
-        # (batch * n_windows) - flattened, usefull when slicing target vector at the end
-        y_preds = {k: y_pred.view(-1) for k, y_pred in y_pred_heads.items()}
+class VTC2HuBERT(nn.Module):
+    def __init__(
+        self,
+        label_encoder: MultiLabelEncoder,
+        config: ModelConfig,
+    ) -> None:
+        super().__init__()
+        self.config = config
+        self.label_encoder = label_encoder
 
-        # FIXME - y_target should be one value per label
-        head_losses = {
-            k: torch.nn.functional.binary_cross_entropy_with_logits(
-                input=y_pred, target=y_target[..., i], weight=self.weights
-            )
-            for i, (k, y_pred) in enumerate(y_preds.items())
-        }
+        raw = load_pretrained_hubert_for_finetuning(self.config.model_id)
 
-        loss = torch.stack(list(head_losses.values())).sum()
-        self.log(
-            "train/loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
+        # HUBERT_LARGE / HUBERT_XLARGE set `_normalize_waveform=True`, so
+        # `bundle.get_model()` returns a `_Wav2Vec2Model` wrapper whose real
+        # Wav2Vec2Model is at `.model` and which layer-norms the input
+        # waveform before the feature extractor. HUBERT_BASE returns the
+        # bare Wav2Vec2Model. Unwrap and remember whether to normalize.
+        if hasattr(raw, "model"):  # _Wav2Vec2Model wrapper (large / xlarge)
+            self.normalize_waveform = bool(raw.normalize_waveform)
+            self.encoder = raw.model
+        else:  # bare Wav2Vec2Model (base)
+            self.normalize_waveform = False
+            self.encoder = raw
+
+        self.encoder_output_size = (
+            self.encoder.encoder.feature_projection.projection.out_features
         )
-        for head_name, head_loss in head_losses.items():
-            self.log(
-                f"train/loss_{head_name.removeprefix('linear_head_')}",
-                head_loss,
-                on_step=True,
-                on_epoch=True,
-                prog_bar=False,
-                logger=True,
-            )
-        return loss
 
-    def validation_step(self, batch, batch_idx):
-        x = batch["x"]
-        y_target = batch["y"]
-        y_pred_heads = self.forward(x)
+        # NOTE - freeze CNN feature extractor
+        for p in self.encoder.feature_extractor.parameters():
+            p.requires_grad = False
 
-        # reduce first 2 dimensions (batch and windows can be merged)
-        n_labels = len(self.label_encoder.labels)
-
-        y_target = y_target.view(-1, n_labels)
-        # (batch * n_windows) - flattened, usefull when slicing target vector at the end
-        y_preds = {k: y_pred.view(-1) for k, y_pred in y_pred_heads.items()}
-        # NOTE - loss computation
-        if (
-            self.config.train.validation_metric == "loss"
-            or "loss" in self.config.train.extra_val_metrics
-        ):
-            head_losses = {
-                k: torch.nn.functional.binary_cross_entropy_with_logits(
-                    input=y_pred, target=y_target[..., i], weight=self.weights
+        self.dropout = nn.Dropout()
+        self.task_heads = nn.ModuleDict(
+            {
+                # encoder_embed_dim
+                f"linear_head_{label}": nn.Linear(
+                    in_features=self.encoder_output_size, out_features=1
                 )
-                for i, (k, y_pred) in enumerate(y_preds.items())
+                for label in label_encoder.base_labels
             }
+        )
 
-            loss = torch.stack(list(head_losses.values())).sum()
-            self.log(
-                "val/loss",
-                loss,
-                on_step=True,
-                on_epoch=True,
-                prog_bar=True,
-                logger=True,
-            )
-            for head_name, head_loss in head_losses.items():
-                self.log(
-                    f"val/loss_{head_name.removeprefix('linear_head_')}",
-                    head_loss,
-                    on_step=True,
-                    on_epoch=True,
-                    prog_bar=False,
-                    logger=True,
-                )
+        self.conv_settings = ConvolutionSettings(
+            kernels=(10, 3, 3, 3, 3, 2, 2),
+            strides=(5, 2, 2, 2, 2, 2, 2),
+            paddings=(0, 0, 0, 0, 0, 0, 0),
+        )
 
-        # NOTE - f1 score
-        if (
-            self.config.train.validation_metric == "f1_score"
-            or "f1_score" in self.config.train.extra_val_metrics
-        ):
-            head_f1_scores = {
-                k: binary_f1_score(
-                    preds=y_pred,
-                    target=y_target[..., i],
-                    threshold=0.5,
-                )
-                for i, (k, y_pred) in enumerate(y_preds.items())
-            }
-            for head_name, head_f1_score in head_f1_scores.items():
-                self.log(
-                    f"val/f1_{head_name.removeprefix('linear_head_')}",
-                    head_f1_score,
-                    on_step=True,
-                    on_epoch=True,
-                    prog_bar=True,
-                    logger=True,
-                )
-            # TODO - total f1_score using a merger of TP/FP ...
+    def forward(self, x: torch.Tensor, output: Literal["tensor", "dict"] = "tensor"):
+        # Normalize by hand since we bypass `_Wav2Vec2Model.forward`.
+        if self.normalize_waveform:
+            x = nn.functional.layer_norm(x, x.shape)
 
-    def state_dict(self, *args, **kwargs):
-        """Custom state_dict that excludes the whisper encoder."""
-        state_dict = super().state_dict(*args, **kwargs)
-        # Remove all entries starting with 'w_encoder.'
-        keys_to_remove = [k for k in state_dict.keys() if k.startswith("encoder.")]
-        for k in keys_to_remove:
-            del state_dict[k]
-        return state_dict
+        with torch.no_grad():
+            x, lengths = self.encoder.feature_extractor(x, None)
 
-    def load_state_dict(
-        self, state_dict: Mapping[str, Any], strict: bool = True, assign: bool = False
-    ):
-        """Custom load_state_dict that doesn't require whisper encoder weights."""
-        return super().load_state_dict(state_dict, strict=False, assign=assign)
+        hidden_states = self.encoder.encoder.extract_features(
+            x, lengths, num_layers=None
+        )
+
+        x = self.dropout(hidden_states[-1])
+        if output == "dict":
+            return {name: head(x) for name, head in self.task_heads.items()}
+        elif output == "tensor":
+            return torch.stack([head(x) for head in self.task_heads.values()], dim=-1)
+        else:
+            raise ValueError(f"Output type: {output} is not supported.")

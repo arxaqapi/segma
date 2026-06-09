@@ -6,7 +6,6 @@ from typing import Literal, Self
 
 import numpy as np
 from interlap import InterLap
-from tqdm import tqdm
 
 from segma.config import Config
 from segma.data.utils import (
@@ -27,10 +26,6 @@ class URISubsetLeakageError(Exception):
     """Error raised when there is data leakage between the different defined subsets."""
 
 
-class CacheTooOldError(Exception):
-    """Error raised when the cache is too old and the dataset needs to be entirely reloaded."""
-
-
 @dataclass
 class DatasetSubset:
     uris: list
@@ -46,8 +41,6 @@ class SegmaFileDataset:
     Format of the dataset:
     ```
     dataset_name/
-    ├── aa/
-    │   └── 0000.aa
     ├── rttm/
     │   └── 0000.rttm
     ├── uem/ (optional)
@@ -102,7 +95,7 @@ class SegmaFileDataset:
     def from_config(cls, config: Config) -> Self:
         return cls(
             config.data.dataset_path,
-            config.data.classes,
+            config.data.labels,
             config.audio.chunk_duration_s,
             config.audio.sample_rate,
         )
@@ -153,7 +146,11 @@ class SegmaFileDataset:
         self.check_for_data_leakage(subset_to_uris)
         return subset_to_uris
 
-    def _load(self) -> None:
+    def load(self) -> None:
+        """Loads all annotation informations about the dataset,
+        retrieves and store the total length of the corresponding audios and annotated duration,
+        and createst `Interlap`objects per uri.
+        """
         # ~70h max per audio
         _durations_t = np.dtype(
             [("audio_duration_f", np.uint32), ("annotated_duration_f", np.uint32)]
@@ -165,7 +162,7 @@ class SegmaFileDataset:
         uris_to_remove: set[str] = set()
         for subset in self.SUBSET_NAMES:
             durations: list[tuple[int, int]] = []
-            for uri in tqdm(self.subset_to_uris[subset]):
+            for uri in self.subset_to_uris[subset]:
                 uri_path = (self.wav_p / uri).with_suffix(".wav").resolve()
                 info = get_audio_info(uri_path)
                 # NOTE - check that the audio is valid
@@ -173,7 +170,7 @@ class SegmaFileDataset:
                     uris_to_remove.add(uri)
                     continue
 
-                annotations = load_annotations((self.aa_p / uri).with_suffix(".aa"))
+                annotations = load_annotations((self.rttm_p / uri).with_suffix(".rttm"))
                 # NOTE - Only labels covered in the config file are kept.
                 annotations = filter_annotations(annotations, self.classes)
 
@@ -206,30 +203,6 @@ class SegmaFileDataset:
         self.subds_to_durations = subds_to_durations
         self.subds_to_interlaps = subds_to_interlaps
 
-    def load(self, use_cache: bool = True) -> None:
-        """Loads all annotation informations about the dataset,
-        retrieves and store the total length of the corresponding audios and annotated duration,
-        and createst `Interlap`objects per uri.
-
-        This function first checks if the cache is available and tries to load it,
-        if it fails it will build the dataset.
-
-        Args:
-            use_cache (bool, optional): Is set to false, will reload the dataset,
-                else will look into and existing. Defaults to True.
-        """
-        try:
-            if use_cache:
-                self.load_cache()
-                return
-        except FileNotFoundError:
-            self._load()
-        except CacheTooOldError:
-            self._load()
-        else:
-            self._load()
-        self.save_cache()
-
     def _validate_uri(self, num_frames: int, sample_rate: int) -> bool:
         """Validate the audio file, checks that the size is bigger than `chunk_duration_s`
         and that the ample rate matches the one defined in `self.sample_rate`.
@@ -246,65 +219,6 @@ class SegmaFileDataset:
             frames_to_seconds(num_frames, sample_rate) >= self.chunk_duration_s
             and sample_rate == self.sample_rate
         )
-
-    def load_cache(self, max_days: float = 2.0) -> None:
-        """Loads the cached durations informations and interlap objects if the cache is available.
-
-        The cache is invalidated after a certain time defined by `max_days`.
-
-        Args:
-            max_days (float, optional): Maximum number of days before the cache is invalidated. Defaults to 2..
-
-        Raises:
-            FileNotFoundError: Raisd if the cache objects are not found.
-            CacheTooOldError: Raised if the cache is too old and needs to be invalidated.
-        """
-        import pickle
-        import time
-
-        # REVIEW based on base_p
-        cache_path: Path = Path(".cache/segma") / self.base_p.stem
-        cache_path.mkdir(parents=True, exist_ok=True)
-
-        subds_to_durations_p = cache_path / "subds_to_durations"
-        subds_to_interlaps_p = cache_path / "subds_to_interlaps"
-
-        if not subds_to_durations_p.exists() or not subds_to_interlaps_p.exists():
-            raise FileNotFoundError
-
-        # NOTE - check if outdated (> 7 days)
-        current = time.time()
-
-        def days_diff(time: float) -> float:
-            return (current - time) / 3600 / 24
-
-        # NOTE - if the has been create more than max_days days ago, trigger reloading and recaching
-        if (
-            days_diff(subds_to_durations_p.stat().st_ctime) > max_days
-            or days_diff(subds_to_interlaps_p.stat().st_ctime) > max_days
-        ):
-            raise CacheTooOldError(f"Cache is older than {max_days} days.")
-
-        # NOTE - unpickle `subds_to_durations`` and `subds_to_interlaps``
-        with subds_to_durations_p.open("rb") as bf:
-            self.subds_to_durations = pickle.load(bf)
-        with subds_to_interlaps_p.open("rb") as bf:
-            self.subds_to_interlaps = pickle.load(bf)
-
-    def save_cache(self) -> None:
-        """Save the computed dataset informations to disk.
-
-        The cache file lies in .cache/segma/self.base_p
-        """
-        import pickle
-
-        # REVIEW based on base_p
-        cache_path: Path = Path(".cache/segma") / self.base_p.stem
-        cache_path.mkdir(parents=True, exist_ok=True)
-        with (cache_path / "subds_to_durations").open("wb") as bf:
-            pickle.dump(self.subds_to_durations, bf)
-        with (cache_path / "subds_to_interlaps").open("wb") as bf:
-            pickle.dump(self.subds_to_interlaps, bf)
 
     def is_loaded(self, raises: bool = False) -> bool:
         """Verifies that the dataset has been loaded.
@@ -324,31 +238,6 @@ class SegmaFileDataset:
         if raises and not is_loaded:
             raise DatasetNotLoadedError
         return is_loaded
-
-    @classmethod
-    def clean_cache(cls, base_p: str | Path) -> None:
-        """Invalidates the cache by removing all files and the cache folder.
-
-        This will fail silently if the folder is empty or does not exist.
-
-        Args:
-            base_p (str | Path): Base path of the dataset used to find the cache.
-        """
-        cache_path = Path(".cache/segma") / base_p
-
-        subds_to_durations_p = cache_path / "subds_to_durations"
-        subds_to_interlaps_p = cache_path / "subds_to_interlaps"
-
-        subds_to_durations_p.unlink(missing_ok=True)
-        subds_to_interlaps_p.unlink(missing_ok=True)
-        try:
-            cache_path.rmdir()
-        except:
-            pass
-
-    @property
-    def aa_p(self) -> Path:
-        return self.base_p / "aa"
 
     @property
     def rttm_p(self) -> Path:

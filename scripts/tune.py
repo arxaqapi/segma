@@ -4,92 +4,13 @@ from pathlib import Path
 from pprint import pprint
 
 import sklearn
+import tomlkit
 import torch
-from ruamel.yaml import YAML
 from tqdm import tqdm
 
-from segma.config.base import load_config
+from segma.config import load_config
 from segma.data.utils import load_uris
-
-
-def rttm_to_tensor(
-    rttm_path: Path, labels: list[str], frame_resolution_s: float = 0.02
-) -> torch.Tensor:
-    """Convert RTTM file to multi-hot encoded tensor at specified resolution.
-
-    Args:
-        rttm_path (Path): Path to RTTM file.
-        labels (list[str]): List of labels.
-        frame_resolution_s (float, optional): Time resolution in seconds. Defaults to 0.02s (20ms).
-
-    Returns:
-        torch.Tensor: Of shape (num_frames, num_labels)
-    """
-    # Parse RTTM
-    segments = []
-    label_set = set(labels)
-    with open(rttm_path, "r") as f:
-        for line in f:
-            parts = line.strip().split()
-
-            start_s = float(parts[3])
-            duration_s = float(parts[4])
-            label = parts[7]
-            if label in label_set:
-                segments.append((start_s, duration_s, label))
-
-    # Build label mapping
-    label_to_idx = {label: i for i, label in enumerate(labels)}
-
-    # Determine number of frames
-    total_duration = max(start + dur for start, dur, _ in segments) if segments else 0
-    num_frames = math.ceil(total_duration / frame_resolution_s)
-
-    # Create tensor and fill
-    tensor = torch.zeros(num_frames, len(labels), dtype=torch.float32)
-
-    for start, duration, label in segments:
-        start_frame = int(start / frame_resolution_s)
-        end_frame = min(math.ceil((start + duration) / frame_resolution_s), num_frames)
-        tensor[start_frame:end_frame, label_to_idx[label]] = 1.0
-
-    return tensor
-
-
-def pad_tensors(tensor_0: torch.Tensor, tensor_1: torch.Tensor):
-    """Given two tensors, pad the smallest one with zeroes to match the longest one on dim 0."""
-    return (
-        torch.nn.functional.pad(
-            tensor_0, (0, 0, 0, max(0, tensor_1.shape[0] - tensor_0.shape[0]))
-        ),
-        torch.nn.functional.pad(
-            tensor_1, (0, 0, 0, max(0, tensor_0.shape[0] - tensor_1.shape[0]))
-        ),
-    )
-
-
-def unify(
-    uri_to_logits_t_0: dict[str, torch.Tensor],
-    uri_to_logits_t_1: dict[str, torch.Tensor],
-    uris_to_load: set[str],
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Makes sure the loaded tensor data is consistent shape-wise.
-    Pad if not.
-    """
-    t0_map = {}
-    t1_map = {}
-    for uri in uris_to_load:
-        t0, t1 = pad_tensors(
-            uri_to_logits_t_0[uri],
-            uri_to_logits_t_1[uri],
-        )
-        t0_map[uri] = t0
-        t1_map[uri] = t1
-
-    # stack loaded and padded tensors
-    return torch.cat(list(t0_map.values()), dim=0), torch.cat(
-        list(t1_map.values()), dim=0
-    )
+from segma.utils import rttm_to_tensor, unify
 
 
 def load_pred_logits(
@@ -105,7 +26,7 @@ def load_pred_logits(
         uri = logit_file.stem.split(f"{str_suffix}")[0]
         # NOTE - only load if uri in uris_to_load
         if uri in uris_to_load:
-            logit_dict = torch.load(logit_file, map_location="cpu")
+            logit_dict = torch.load(logit_file, map_location="cpu", weights_only=False)
             # (frames, n_labels)
             uri_to_logit[uri] = torch.stack(
                 [logit_dict[label] for label in labels], dim=1
@@ -117,7 +38,7 @@ def load_gt_as_logits(
     rttm_path: Path,
     uris_to_load: set[str],
     labels: list[str],
-) -> None:
+) -> dict[str, torch.Tensor]:
     """Given a path to rttm files and a list of uris to select, loads the content of the RTTM files, converts them to tensors and returns a mapping from uris to tensors"""
     # NOTE - use `rttm_to_tensor` to load all gt rttms (filter by uris: val.txt)
     # NOTE - stack all logits
@@ -223,6 +144,8 @@ def tune_multilabel(
     ...
 
     """
+    decimals = int(math.log10(len(thresholds))) + 1
+
     labels_to_thresh_to_score = {label: {} for label in labels}
     for thresh in tqdm(thresholds):
         f1_score = sklearn.metrics.f1_score(
@@ -239,7 +162,7 @@ def tune_multilabel(
 
     # NOTE - retrieve best thresholds
     best_thresholds = {
-        label: {
+        str(label): {
             "lower_bound": round(
                 float(
                     max(
@@ -247,7 +170,7 @@ def tune_multilabel(
                         key=labels_to_thresh_to_score[label].get,
                     )
                 ),
-                int(math.log10(n_steps)),
+                decimals,
             ),
             "upper_bound": 1.0,
         }
@@ -256,12 +179,62 @@ def tune_multilabel(
     return best_thresholds
 
 
+def tune_multilabel_to_dict(
+    data_t: dict[str, dict[str, torch.Tensor]],
+    thresholds: list[int] | torch.Tensor,
+    labels: list[str],
+    output_path: str | Path,
+) -> dict[str, dict[float, dict[str, float]]]:
+    """Tuning of the decision thresholds for a multilabel problem.
+    The tuning is made using a simple grid-search given a list of thresholds to evaluate. Only the onset / lower bound is tuned
+
+    ...
+    |----LxxxxU---|
+    ...
+
+    """
+    labels_to_thresh_to_score: dict[str, dict[float, dict[str, float]]] = {
+        label: {} for label in labels
+    }
+    label_indices = list(range(len(labels)))
+
+    for thresh in tqdm(thresholds):
+        y_true = data_t["val"]["true"]
+        y_pred = data_t["val"]["pred"].sigmoid() > thresh
+
+        precision, recall, f1, _ = sklearn.metrics.precision_recall_fscore_support(
+            y_true=y_true,
+            y_pred=y_pred,
+            average=None,
+            labels=label_indices,
+            zero_division=1.0,
+        )
+
+        thresh_key = float(
+            thresh.item() if isinstance(thresh, torch.Tensor) else thresh
+        )
+        for i, label in enumerate(labels):
+            labels_to_thresh_to_score[label][thresh_key] = {
+                "f1": float(f1[i]),
+                "precision": float(precision[i]),
+                "recall": float(recall[i]),
+            }
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w") as f:
+        import json
+
+        json.dump(labels_to_thresh_to_score, f, indent=2)
+
+    return labels_to_thresh_to_score
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--config",
         type=Path,
-        default=Path("src/segma/config/default.yml"),
         help="Config file to be loaded and used for inference.",
     )
     parser.add_argument("--precision", type=float, default=0.1)
@@ -286,25 +259,23 @@ if __name__ == "__main__":
     args = parser.parse_args()
     config = load_config(args.config)
 
-    assert args.precision in (0.1, 0.01)
+    assert args.precision in (0.1, 0.01, 0.001)
 
     n_steps = int(1 / args.precision)
-    thresholds = torch.linspace(0, 1, steps=n_steps).round(
-        decimals=int(math.log10(n_steps))
-    )
+    thresholds = torch.linspace(0, 1, steps=n_steps + 1)[1:-1]
 
     print("[log] - Loading data...")
     data_t = get_data(
         val_true_path=args.val_ds,
         val_pred_path=args.val_logits,
-        labels=config.data.classes,
+        labels=config.data.labels,
     )
 
     print("[log] - Searching for optimal thresholds...")
-    best_thresholds = tune_multilabel(data_t, thresholds, config.data.classes)
+    best_thresholds = tune_multilabel(data_t, thresholds, config.data.labels)
 
     print("[log] - Best threshold found")
     pprint(best_thresholds)
 
     args.output.mkdir(parents=True, exist_ok=True)
-    YAML().dump(best_thresholds, args.output / "best_thresholds.yml")
+    (args.output / "best_thresholds.toml").write_text(tomlkit.dumps(best_thresholds))

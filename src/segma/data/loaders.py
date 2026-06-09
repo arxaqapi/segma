@@ -2,7 +2,7 @@ from math import ceil
 from pathlib import Path
 from typing import Callable, Generator
 
-import lightning as pl
+import lightning as L
 import numpy as np
 import torch
 from interlap import InterLap
@@ -22,8 +22,8 @@ from segma.utils.io import get_samples_in_range
 class DataLoaderError(Exception): ...
 
 
-class SegmentationDataLoader(pl.LightningDataModule):
-    """`SegmentationDataLoader` is a `pl.LightningDataModule` subclass that loads all required informations about the dataset
+class SegmentationDataLoader(L.LightningDataModule):
+    """`SegmentationDataLoader` is a `L.LightningDataModule` subclass that loads all required informations about the dataset
     and returns `AudioSegmentationDataset` (which are `IterableDataset`s) for training and validation.
 
     On initialization, the `SegmentationDataLoader` loads all uris,
@@ -46,8 +46,6 @@ class SegmentationDataLoader(pl.LightningDataModule):
         self.conv_settings = conv_settings
         self.audio_preparation_hook = audio_preparation_hook
 
-        self.rng = np.random.default_rng()
-
         # NOTE - load dataset
         if not dataset.is_loaded():
             dataset.load()
@@ -63,7 +61,7 @@ class SegmentationDataLoader(pl.LightningDataModule):
             ),
             batch_size=self.config.train.batch_size,
             drop_last=True,
-            num_workers=self.config.train.dataloader.num_workers,
+            num_workers=self.config.train.dataload_num_workers,
             persistent_workers=True,
             multiprocessing_context="fork"
             if torch.backends.mps.is_available()
@@ -78,10 +76,11 @@ class SegmentationDataLoader(pl.LightningDataModule):
                 conv_settings=self.conv_settings,
                 label_encoder=self.label_encoder,
                 audio_preparation_hook=self.audio_preparation_hook,
+                is_val=True,
             ),
             batch_size=self.config.train.batch_size,
             drop_last=True,
-            num_workers=self.config.train.dataloader.num_workers,
+            num_workers=self.config.train.dataload_num_workers,
             persistent_workers=True,
             multiprocessing_context="fork"
             if torch.backends.mps.is_available()
@@ -101,6 +100,7 @@ class AudioSegmentationDataset(IterableDataset):
         conv_settings: ConvolutionSettings,
         label_encoder: LabelEncoder,
         audio_preparation_hook: Callable | None = None,
+        is_val: bool = False,
     ) -> None:
         self.uris = subset.uris
         self.durations = subset.durations
@@ -111,11 +111,12 @@ class AudioSegmentationDataset(IterableDataset):
         self.label_encoder = label_encoder
         self.audio_preparation_hook = audio_preparation_hook
 
+        self.is_val = is_val
+
         self.windows = generate_frames(
             conv_settings=self.conv_settings,
             sample_rate=config.audio.sample_rate,
             chunk_duration_s=config.audio.chunk_duration_s,
-            # NOTE - strict_frames: True is pyannet - False if whisper
             strict=config.audio.strict_frames,
         )
 
@@ -150,7 +151,9 @@ class AudioSegmentationDataset(IterableDataset):
             start_index_f = int(
                 rng.integers(
                     low=0,
-                    high=self.durations["audio_duration_f"][uri_i] - durations_f,
+                    high=max(
+                        1, self.durations["audio_duration_f"][uri_i] - durations_f
+                    ),
                 )
             )
             # NOTE - 3. {'x': cropped audio from [start_idx: start_idx + duration]
@@ -163,11 +166,6 @@ class AudioSegmentationDataset(IterableDataset):
                 duration_f=durations_f,
             )
 
-            # if self.classify_sequence:
-            #    y_target = windows_to_targets(
-            #        np.asarray([[0,9216]]), self.label_encoder, self.annotations[uri_i]
-            #    )
-            # else :
             # NOTE - 4. generate corresponding sliding window 'y' vector and get labels
             windows = self.windows + start_index_f
             y_target = windows_to_targets(
@@ -236,12 +234,13 @@ class AudioSegmentationDataset(IterableDataset):
         Returns:
             int: Estimated number of training samples (chunks) drawn in one epoch.
         """
+        k = 1.0 if self.is_val else self.config.data.dataset_multiplier
         # audio_duration_f, annotated_duration_f
         total_annotated_duration_s = frames_to_seconds(
             self.durations["audio_duration_f"].sum()
         )
         return int(
-            self.config.data.dataset_multiplier
+            k
             * max(
                 ceil(total_annotated_duration_s / self.config.audio.chunk_duration_s),
                 self.config.train.batch_size,
@@ -276,13 +275,10 @@ def generate_frames(
     Returns:
         np.ndarray: An array of shape (n_windows, 2), where each row is [start_frame, end_frame].
     """
-    # should be 32_000 for 2s @ 16khz
-    # should be 96_000 for 6s @ 16khz
     chunk_duration_f = int(seconds_to_frames(chunk_duration_s, sample_rate))
 
     # if strict, each window will have the exact same size `rf_size(...)`,
     # else allow shorter frames that are then clipped
-    # 352 with pyannet and cds=6
     n_windows = conv_settings.n_windows(
         chunk_duration_f=chunk_duration_f, strict=strict
     )

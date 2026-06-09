@@ -1,0 +1,26 @@
+[logging]
+offline = false
+project = "segma_v2"
+name = "train_VTC-2.1"
+tags = ["vtc-2.1", "u20"]
+
+[data]
+dataset_path = "data/_derivations/baby_train_u20"
+labels = ["KCHI", "OCH", "MAL", "FEM"]
+
+[audio]
+chunk_duration_s = 4
+sample_rate = 16_000
+strict_frames = true
+
+# vtc2, hubert_base, hubert_large, w2v2-ll4300
+[model]
+model_id = "w2v2-ll4300" 
+model_checkpoint = "models/wav2vec2_ll4300_torchaudio.pt"
+
+[train]
+learning_rate = 1.0e-05
+batch_size = 128
+max_epochs = 2
+dataload_num_workers = 24
+scheduler_patience = 3

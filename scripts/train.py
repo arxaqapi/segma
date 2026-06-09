@@ -61,13 +61,13 @@ if __name__ == "__main__":
     logger.experiment.config.update(config.as_dict())
 
     (checkpoint_path / "steps").mkdir(parents=True, exist_ok=True)
-    periodic_checkpoint = ModelCheckpoint(
-        every_n_train_steps=500,
-        save_top_k=-1,
-        dirpath=checkpoint_path / "steps",
-        filename="step={step:8d}",
-        auto_insert_metric_name=False,
-    )
+    # periodic_checkpoint = ModelCheckpoint(
+    #     every_n_train_steps=500,
+    #     save_top_k=-1,
+    #     dirpath=checkpoint_path / "steps",
+    #     filename="step={step:8d}",
+    #     auto_insert_metric_name=False,
+    # )
     best_checkpoint = ModelCheckpoint(
         monitor="val/loss",
         save_top_k=-1,
@@ -92,11 +92,11 @@ if __name__ == "__main__":
         max_epochs=config.train.max_epochs,
         logger=logger,
         callbacks=[
-            periodic_checkpoint,
+            # periodic_checkpoint,
             best_checkpoint,
             early_stopping,
             LearningRateMonitor(),
-            TQDMProgressBar(1000),
+            TQDMProgressBar(100),
         ],
     )
 

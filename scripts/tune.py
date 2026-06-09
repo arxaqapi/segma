@@ -179,6 +179,57 @@ def tune_multilabel(
     return best_thresholds
 
 
+def tune_multilabel_to_dict(
+    data_t: dict[str, dict[str, torch.Tensor]],
+    thresholds: list[int] | torch.Tensor,
+    labels: list[str],
+    output_path: str | Path,
+) -> dict[str, dict[float, dict[str, float]]]:
+    """Tuning of the decision thresholds for a multilabel problem.
+    The tuning is made using a simple grid-search given a list of thresholds to evaluate. Only the onset / lower bound is tuned
+
+    ...
+    |----LxxxxU---|
+    ...
+
+    """
+    labels_to_thresh_to_score: dict[str, dict[float, dict[str, float]]] = {
+        label: {} for label in labels
+    }
+    label_indices = list(range(len(labels)))
+
+    for thresh in tqdm(thresholds):
+        y_true = data_t["val"]["true"]
+        y_pred = data_t["val"]["pred"].sigmoid() > thresh
+
+        precision, recall, f1, _ = sklearn.metrics.precision_recall_fscore_support(
+            y_true=y_true,
+            y_pred=y_pred,
+            average=None,
+            labels=label_indices,
+            zero_division=1.0,
+        )
+
+        thresh_key = float(
+            thresh.item() if isinstance(thresh, torch.Tensor) else thresh
+        )
+        for i, label in enumerate(labels):
+            labels_to_thresh_to_score[label][thresh_key] = {
+                "f1": float(f1[i]),
+                "precision": float(precision[i]),
+                "recall": float(recall[i]),
+            }
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w") as f:
+        import json
+
+        json.dump(labels_to_thresh_to_score, f, indent=2)
+
+    return labels_to_thresh_to_score
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(

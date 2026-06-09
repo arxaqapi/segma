@@ -1,109 +1,81 @@
-# takes a folder full of true_rttms, a folder full of pred_rttms
-# pass everything trough pyannote.metrics
-# output overall stats
-from functools import reduce
 from pathlib import Path
-from typing import Mapping
 
-from pyannote.audio.utils.metric import MacroAverageFMeasure
-from pyannote.core import Annotation
-from pyannote.database.util import load_rttm
+import sklearn
+import tomlkit
+import torch
 
-from segma.config import load_config
-from segma.utils.encoders import (
-    LabelEncoder,
-    MultiLabelEncoder,
-)
+from segma.config import Config, load_config
+from segma.utils import rttm_to_tensor, unify
 
 
-def get_model_output_as_annotations(output_path: Path) -> Mapping[str, Annotation]:
-    """Load the output of a model (collectioin of `.rttm` files) as `pyannote.core.Annotation` objects
-    and returns a dict that maps uri to the corresponding RTTMs.
-    Args:
-        output_path (Path): Path to the folder containing the model outputs.
-    Returns:
-        dict[str, Annotation]: mapping from uris to Annotations.
-    """
-    annotations = {}
-    for rttm in output_path.glob("*.rttm"):
-        loaded_rttms = load_rttm(rttm)
-        annotations[rttm.stem] = (
-            Annotation(rttm.stem) if not loaded_rttms else loaded_rttms[rttm.stem]
-        )
-    return annotations
+def load_gt_as_logits(
+    rttm_path: Path,
+    labels: list[str],
+) -> dict[str, torch.Tensor]:
+    """Given a path to rttm files and a list of uris to select, loads the content of the RTTM files, converts them to tensors and returns a mapping from uris to tensors"""
+    # NOTE - use `rttm_to_tensor` to load all gt rttms (filter by uris: val.txt)
+    # NOTE - stack all logits
+    uri_to_logit = {
+        rttm_p.stem: rttm_to_tensor(rttm_p, labels=labels)
+        for rttm_p in rttm_path.glob("*.rttm")
+    }
+    return uri_to_logit
 
 
-def eval_model_output(
-    rttm_true_p: Path,
-    rttm_pred_p: Path,
-    label_encoder: LabelEncoder,
-    scores_output: Path = Path("fscore.csv"),
-):
-    """Evaluates the performance of a model using the `MacroAverageFMeasure`from the `pyannote.metrics`
-    package.
+class Evaluator:
+    def __init__(self, gt_rttm_path: Path, pred_rttm_path: Path, config: Config):
+        gt_logits = load_gt_as_logits(rttm_path=gt_rttm_path, labels=config.data.labels)
+        pred_logits = load_gt_as_logits(pred_rttm_path, labels=config.data.labels)
 
-    This function needs the mode to have ran on the data to evaluate with the `predict(...)` function.
-
-    Args:
-        rttm_true_p (Path): A Path to a list of ground truth `.rttm` files.
-        rttm_pred_p (Path): A Path to a list of predicted `.rttm` files
-        label_encoder (LabelEncoder): The label encoder used during training, to be able to retrieve the labels used.
-        scores_output (Path, optional): Output Path of the csv file containg the scores. Defaults to Path("fscore.csv").
-    """
-
-    if not rttm_true_p.exists() and not rttm_true_p.is_dir():
-        raise FileNotFoundError(f"Folder Path '{rttm_true_p=}' not found.")
-    if not rttm_pred_p.exists() and not rttm_pred_p.is_dir():
-        raise FileNotFoundError(f"Folder Path '{rttm_pred_p=}' not found.")
-
-    metric = MacroAverageFMeasure(classes=list(label_encoder.base_labels))
-
-    uri_to_rttm_true = get_model_output_as_annotations(rttm_true_p)
-    uri_to_rttm_preds = get_model_output_as_annotations(rttm_pred_p)
-
-    supported_uris = set(uri_to_rttm_true.keys()) & set(uri_to_rttm_preds.keys())
-
-    # TODO - base yourself on true uris and simulate empty annotations (or create empty files)
-    for uri in supported_uris:
-        print(f"[log] - evaluating file: '{uri}'")
-
-        metric(
-            reference=uri_to_rttm_true[uri],
-            hypothesis=uri_to_rttm_preds[uri],
-            # NOTE - UEM is inferred
-            detailed=True,
+        self.supported_uris = gt_logits.keys() & pred_logits.keys()
+        self.gt_logits_t, self.pred_logits_t = unify(
+            gt_logits, pred_logits, uris_to_load=self.supported_uris
         )
 
-    try:
-        metric.report(display=True).to_csv(str(scores_output))
-        # NOTE - make a symbolic link to it in the static folder
-        static_score_p = Path("models/last/fscore.csv")
-        if not scores_output.absolute() == static_score_p.absolute():
-            static_score_p.parent.mkdir(parents=True, exist_ok=True)
-            static_score_p.unlink(missing_ok=True)
-            static_score_p.symlink_to(scores_output.absolute())
-    except BaseException as e:
-        print(f"[log] - Got error running `metric.report`: {e}")
+        self.config = config
+        self.output_path = pred_rttm_path.parent
 
-    # NOTE - Manual logging of metrics
-    final_res = {"Total": abs(metric)}
-    for label, sub_metric in metric._sub_metrics.items():
-        final_res[label] = abs(sub_metric)
+    def _get_f_measure(self):
+        report = sklearn.metrics.classification_report(
+            y_true=self.gt_logits_t,
+            y_pred=self.pred_logits_t,
+            # For multilabel targets, labels are column indices.
+            labels=list(range(len(self.config.data.labels))),
+            target_names=self.config.data.labels,
+            zero_division=1.0,
+            output_dict=True,
+        )
 
-    print("=====================")
-    print("[log] - Results\n")
-    max_len = reduce(max, [len(label) for label in final_res.keys()]) + 1
-    for k, fscore in final_res.items():
-        print(f"{k:<{max_len}}: {round(fscore, 5)}")
-    print("=====================")
+        with (self.output_path / "fscore.toml").open("w") as f:
+            tomlkit.dump(report, f)
+
+        return report
+
+    def _ml_conf_matrix(self):
+        raise NotImplementedError
+        _mlm = sklearn.metrics.multilabel_confusion_matrix(
+            y_true=self.gt_logits_t,
+            y_pred=self.pred_logits_t,
+            # For multilabel targets, labels are column indices.
+            labels=list(range(len(self.config.data.labels))),
+        )
+
+        # TODO - display as square of squares w. pls.subplot_mosaic(...)
+
+    def _get_ier(self):
+        raise NotImplementedError
+
+    def evaluate(self) -> None:
+        self._get_f_measure()
+        # self._get_ier()
 
 
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--gt", default="data/debug/rttm")
-    parser.add_argument("--pred", default="segma_out/rttm")
+    parser.add_argument("--gt", type=Path, default="data/debug/rttm")
+    parser.add_argument("--pred", type=Path, default="segma_out/rttm")
     parser.add_argument(
         "-c",
         "--config",
@@ -113,17 +85,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    args.gt = Path(args.gt)
-    args.pred = Path(args.pred)
-    cfg = load_config(args.config)
+    config = load_config(args.config)
 
-    if "hydra" not in cfg.model.name:
-        raise ValueError("Only `MultiLabelEncoder` is supported")
-    label_encoder = MultiLabelEncoder(labels=cfg.data.classes)
-
-    eval_model_output(
-        rttm_true_p=args.gt,
-        rttm_pred_p=args.pred,
-        label_encoder=label_encoder,
-        scores_output=args.pred.parent / "fscore.csv",
-    )
+    Evaluator(args.gt, args.pred, config).evaluate()

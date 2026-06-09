@@ -15,6 +15,7 @@ scripts/extra/*.tsv
 .vscode
 .cache
 .benchmarks
+.pytest_cache
 
 # Python-generated files
 __pycache__/

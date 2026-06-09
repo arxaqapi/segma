@@ -160,21 +160,35 @@ uv run scripts/evaluate.py \\
 
 
 if __name__ == "__main__":
-    configs = [
-        ("vtc_bbh1.toml", "bbh1"),
-        ("vtc_hubert_base.toml", "hubert-base"),
-        ("vtc_hubert_large.toml", "hubert-large"),
-        ("vtc_w2v2ll4300.toml", "w2v2-ll4300"),
-    ]
-    nnn = 3
-    base_config = Path("config") / configs[nnn][0]
-    destination = (
-        Path("/store/scratch/tkunze/projects/bbh-is26") / configs[nnn][1] / "_long"
-    )
+    """To use the following script, set the folllowing 4 variables then run the script with:
+    `uv run scripts/gen_experiments.py`
+    
+    This will generate N experiments with different names and a single `meta_run.sh`script to launch all jobs at once.
+
+    To use, simply run `sh path/to/experiments/meta_run.sh`.
+    """
+
+    # SECTION - to set
+    DEVICE = "p7" # "p6"
+    CONFIG_TO_GENERATE = "bbh1" # see keys of `configs`
+    OUTPUT_PATH = Path("/store/scratch/tkunze/projects/bbh-is26")
+    N = 10
+    # !SECTION
+
+
+    configs = {
+        "bbh1": "vtc_bbh1.toml",
+        "hubert-base": "vtc_hubert_base.toml",
+        "hubert-large": "vtc_hubert_large.toml",
+        "w2v2-ll4300": "vtc_w2v2ll4300.toml",
+    }
+    assert CONFIG_TO_GENERATE in configs
+
+    base_config = Path("config") / configs[CONFIG_TO_GENERATE]
+    destination = OUTPUT_PATH / CONFIG_TO_GENERATE
     destination.mkdir(parents=True, exist_ok=True)
 
-    seeds = list(range(10))
-
+    seeds = list(range(N))
     n_expes = len(seeds)
     experiment_ids = [new_experiment_id() for _ in range(n_expes)]
 
@@ -197,8 +211,8 @@ if __name__ == "__main__":
         create_total_bash_script(
             output_path=destination / eid,
             dataset_used=exp_config.data.dataset_path,
-            job_name=f"IS26_vtc-2.1_{configs[nnn][1]}",
-            device="p7",
+            job_name=f"IS26_vtc-2.1_{CONFIG_TO_GENERATE}",
+            device=DEVICE,
         )
         i += 1
 

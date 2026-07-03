@@ -224,8 +224,9 @@ def apply_thresholds(
     """
     feature_tensor = feature_tensor.sigmoid()
     assert feature_tensor.shape[-1] == len(thresholds)
+
     threshold_tensor = torch.tensor(
-        [label["lower_bound"] for label in thresholds.values()]
+        [float(label["lower_bound"]) for label in thresholds.values()]
     ).to(torch.device(device))
 
     return feature_tensor > threshold_tensor

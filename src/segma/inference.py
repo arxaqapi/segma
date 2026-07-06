@@ -207,6 +207,59 @@ def apply_model_on_audio(
         [t.view(-1, model.label_encoder.n_labels) for t in logits], dim=0
     )
 
+def apply_model_sliding_window(
+    audio_path: Path,
+    model: torch.nn.Module,
+    device: Literal["cuda", "cpu", "mps"],
+    chunk_duration_s: float = 10.0,
+    stride_pct: float = 0.25,
+    sample_rate: int = 16_000,
+    frame_step_s: float = 0.02,
+    batch_size: int = 128) -> torch.Tensor:
+
+    window_samples = int(chunk_duration_s * sample_rate)
+    stride_samples = int(window_samples * stride_pct)
+    frame_step_samples = int(frame_step_s * sample_rate)
+
+    n_samples = get_audio_info(audio_path).n_samples
+    n_frames_total = n_samples // frame_step_samples
+    n_labels = model.label_encoder.n_labels
+
+    prob_sum = torch.zeros(n_frames_total, n_labels)
+    frame_count = torch.zeros(n_frames_total)
+
+    # precompute every window's start offset up front
+    starts = list(range(0, max(n_samples - 1, 1), stride_samples))
+    if (n_samples - window_samples) not in starts and n_samples > window_samples:
+        pass  # last partial window is handled by the pad logic below regardless of exact alignment
+
+    for batch_start_idx in range(0, len(starts), batch_size):
+        batch_starts = starts[batch_start_idx : batch_start_idx + batch_size]
+
+        chunks = []
+        for start in batch_starts:
+            end = min(start + window_samples, n_samples)
+            audio_chunk = prepare_audio(audio_path, device=device, start_f=start, end_f=end)
+            pad = window_samples - audio_chunk.shape[-1]
+            if pad > 0:
+                audio_chunk = torch.nn.functional.pad(audio_chunk, (0, pad))
+            chunks.append(audio_chunk)
+
+        batch_t = torch.stack(chunks, dim=0)  # (batch, window_samples)
+
+        with torch.inference_mode():
+            logits = model(batch_t)
+            logits = logits.view(batch_t.shape[0], -1, model.label_encoder.n_labels)
+            probs = logits.sigmoid().cpu()
+
+        for i, start in enumerate(batch_starts):
+            start_frame = start // frame_step_samples
+            n_usable = min(probs.shape[1], n_frames_total - start_frame)
+            prob_sum[start_frame : start_frame + n_usable] += probs[i, :n_usable]
+            frame_count[start_frame : start_frame + n_usable] += 1
+
+    frame_count = frame_count.clamp(min=1).unsqueeze(-1)
+    return prob_sum / frame_count
 
 def apply_thresholds(
     feature_tensor: torch.Tensor,
@@ -231,6 +284,12 @@ def apply_thresholds(
 
     return feature_tensor > threshold_tensor
 
+def apply_thresholds_from_probs(probs: torch.Tensor, thresholds: dict, device) -> torch.Tensor:
+    assert probs.shape[-1] == len(thresholds)
+    threshold_tensor = torch.tensor(
+        [float(label["lower_bound"]) for label in thresholds.values()]
+    ).to(torch.device(device))
+    return probs.to(torch.device(device)) > threshold_tensor
 
 def create_intervals(
     thresholded_features: torch.Tensor,
@@ -283,75 +342,54 @@ def write_intervals(
 
 def infer_file(
     audio_path: Path,
-    model: torch.nn.Module,
+    model: MultiLabelModel,
     output_p: Path,
     config: Config,
     batch_size: int,
     device: Literal["cuda", "cpu", "mps"],
     thresholds: None | dict = None,
-    save_logits: bool = False,
+    save_probs: bool = False,
+    stride_pct: float = 0.25,
 ):
-    """Apply the model on the audio in a streaming fashion to ensure memory integrity,
-    threshold the features, retrieve the intervals and write them to disk.
-
-    Args:
-        audio_path (Path): Path to the audio to process.
-        model (torch.nn.Module): model used to perform inference.
-        output_p (Path): output Path that will contain the detections.
-        config (Config): config file of the model.
-        batch_size (int): batch size to use for the forward pass.
-        thresholds (None | dict, optional): threshold dict to use. Defaults to None.
-    """
     if thresholds is None:
         thresholds = {
-            label: {
-                "lower_bound": 0.5,
-                "upper_bound": 1.0,
-            }
+            label: {"lower_bound": 0.5, "upper_bound": 1.0}
             for label in model.label_encoder._labels
         }
-    inference_settings = ConvolutionSettings(
-        kernels=(320,),
-        strides=(320,),
-        paddings=(0,),
-    )
 
-    # NOTE - apply model on audio
-    logits_t = apply_model_on_audio(
+    avg_probs = apply_model_sliding_window(
         audio_path=audio_path,
         model=model,
-        batch_size=batch_size,
-        chunk_duration_s=config.audio.chunk_duration_s,
-        conv_settings=inference_settings,
         device=device,
+        chunk_duration_s=config.audio.chunk_duration_s,
+        stride_pct=stride_pct,
+        batch_size=batch_size,
     )
 
-    # NOTE - save logits to disk
-    # logits_t: (n_frames, n_labels)
-    if save_logits:
-        logits_out_p = output_p / "logits"
-        logits_out_p.mkdir(parents=True, exist_ok=True)
+    if save_probs:
+        probs_out_p = output_p / "probs"
+        probs_out_p.mkdir(parents=True, exist_ok=True)
         torch.save(
             {
-                model.label_encoder.inv_transform(i): logits_t[:, i]
+                model.label_encoder.inv_transform(i): avg_probs[:, i]
                 for i in range(model.label_encoder.n_labels)
             },
-            f"{logits_out_p}/{audio_path.stem}-logits_dict_t.pt",
+            f"{probs_out_p}/{audio_path.stem}-probs_dict_t.pt",
         )
 
-    # NOTE - apply tresholding
-    thresholded_features = (
-        apply_thresholds(logits_t, thresholds=thresholds, device=device).detach().cpu()
-    )
+    thresholded_features = apply_thresholds_from_probs(
+        avg_probs, thresholds=thresholds, device=device
+    ).cpu()
 
-    # NOTE - create intervals
+    inference_settings = ConvolutionSettings(
+        kernels=(320,), strides=(320,), paddings=(0,),
+    )
     intervals = create_intervals(
         thresholded_features=thresholded_features,
         conv_settings=inference_settings,
         label_encoder=model.label_encoder,
     )
 
-    # NOTE - write intervals to disk
     write_intervals(intervals=intervals, audio_path=audio_path, output_p=output_p)
 
 
@@ -403,14 +441,10 @@ def run_inference_on_audios(
     batch_size: int,
     device: Literal["gpu", "cuda", "cpu", "mps"] = "cuda",
     recursive: bool = False,
-    save_logits: bool = False,
+    save_probs: bool = False,
+    stride_pct: float = 0.25,
     logger: Logger | None = None,
 ) -> list[Path]:
-    """Loads a list of audio files and perform inference on them.
-
-    Returns:
-        list[Path]: List of file paths on which inference was performed
-    """
     wavs = Path(wavs)
     checkpoint = Path(checkpoint)
     output = Path(output)
@@ -429,28 +463,21 @@ def run_inference_on_audios(
 
     l_encoder = MultiLabelEncoder(labels=config.data.labels)
 
-    # FIXME - not ideal, MultiLabelModel should be used only for training ...
     model = MultiLabelModel(
-        VTC2(
-            label_encoder=l_encoder,
-            config=config.model,
-        ),
+        VTC2(label_encoder=l_encoder, config=config.model),
         train_config=config.train,
     )
     model.load_state_dict(
         torch.load(checkpoint, map_location="cpu", weights_only=False)["state_dict"]
     )
     model.eval()
-
     model.to(torch.device(device))
 
     processed_files = []
     for i, audio_path in enumerate(files_to_infer_on, 1):
         cur_iter = f"({i:>{len(str(n_files))}}/{n_files})"
         if (output / "raw_rttm" / f"{audio_path.stem}.rttm").exists():
-            logger.info(
-                f"{cur_iter} - File: '{audio_path.stem}' already processed, skipping"
-            )
+            logger.info(f"{cur_iter} - File: '{audio_path.stem}' already processed, skipping")
             continue
 
         s = f"{cur_iter} - running inference for file: '{audio_path.stem}'"
@@ -467,56 +494,28 @@ def run_inference_on_audios(
                 batch_size=batch_size,
                 device=device,
                 thresholds=thresholds,
-                save_logits=save_logits,
+                save_probs=save_probs,
+                stride_pct=stride_pct,
             )
             processed_files.append(audio_path)
         except Exception as _:
-            logger.error(
-                f"{cur_iter} - File {audio_path.stem} could not be processed, skipping"
-            )
+            logger.error(f"{cur_iter} - File {audio_path.stem} could not be processed, skipping")
     return processed_files
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--config",
-        type=Path,
-        required=True,
-        help="Config file to be loaded and used for inference.",
-    )
+    parser.add_argument("--config", type=str, required=True)
     parser.add_argument("--uris", help="list of uris to use for prediction")
     parser.add_argument("--wavs", required=True, default="data/debug/wav")
-    parser.add_argument(
-        "--checkpoint",
-        type=Path,
-        default="models/last/best.ckpt",
-        help="Path to a pretrained model checkpoint.",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        required=True,
-        help="Output Path to the folder that will contain the final predictions.",
-    )
-    parser.add_argument(
-        "--thresholds",
-        type=Path,
-        help="Path to a threshold dict, perform predictions using these threshols, otherwise use default value of .5.",
-    )
-    parser.add_argument(
-        "--batch_size",
-        default=128,
-        type=int,
-        help="Size of the batch used for the forward pass in the model.",
-    )
-    parser.add_argument(
-        "--device",
-        default="cuda",
-        choices=["gpu", "cuda", "cpu", "mps"],
-        help="Size of the batch used for the forward pass in the model.",
-    )
+    parser.add_argument("--checkpoint", default="models/last/best.ckpt")
+    parser.add_argument("--output", required=True)
+    parser.add_argument("--thresholds")
+    parser.add_argument("--batch_size", default=128, type=int)
+    parser.add_argument("--device", default="cuda", choices=["gpu", "cuda", "cpu", "mps"])
+    parser.add_argument("--save_probs", action="store_true")
+    parser.add_argument("--stride_pct", default=0.25, type=float,
+                         help="Sliding window stride as a fraction of chunk_duration_s (0.5 = 50%% overlap).")
 
     args = parser.parse_args()
-
     run_inference_on_audios(**vars(args))

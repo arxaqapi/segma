@@ -212,11 +212,11 @@ def apply_model_sliding_window(
     model: torch.nn.Module,
     device: Literal["cuda", "cpu", "mps"],
     chunk_duration_s: float = 10.0,
-    stride_pct: float = 0.25,
+    stride_pct: float = 0.5,
     sample_rate: int = 16_000,
     frame_step_s: float = 0.02,
-    batch_size: int = 128) -> torch.Tensor:
-
+    batch_size: int = 128,
+) -> torch.Tensor:
     window_samples = int(chunk_duration_s * sample_rate)
     stride_samples = int(window_samples * stride_pct)
     frame_step_samples = int(frame_step_s * sample_rate)
@@ -228,28 +228,31 @@ def apply_model_sliding_window(
     prob_sum = torch.zeros(n_frames_total, n_labels)
     frame_count = torch.zeros(n_frames_total)
 
-    # precompute every window's start offset up front
-    starts = list(range(0, max(n_samples - 1, 1), stride_samples))
-    if (n_samples - window_samples) not in starts and n_samples > window_samples:
-        pass  # last partial window is handled by the pad logic below regardless of exact alignment
+    starts = [s for s in range(0, n_samples, stride_samples) if s < n_samples]
 
     for batch_start_idx in range(0, len(starts), batch_size):
         batch_starts = starts[batch_start_idx : batch_start_idx + batch_size]
 
-        chunks = []
-        for start in batch_starts:
-            end = min(start + window_samples, n_samples)
-            audio_chunk = prepare_audio(audio_path, device=device, start_f=start, end_f=end)
-            pad = window_samples - audio_chunk.shape[-1]
-            if pad > 0:
-                audio_chunk = torch.nn.functional.pad(audio_chunk, (0, pad))
-            chunks.append(audio_chunk)
+        read_start = batch_starts[0]
+        read_end = min(batch_starts[-1] + window_samples, n_samples)
 
-        batch_t = torch.stack(chunks, dim=0)  # (batch, window_samples)
+        # ONE contiguous read for the whole batch, instead of one read per window
+        sub_audio_t = prepare_audio(audio_path=audio_path, device=device, start_f=read_start, end_f=read_end)
+
+        pad = (batch_starts[-1] + window_samples) - read_end
+        if pad > 0:
+            sub_audio_t = torch.nn.functional.pad(sub_audio_t, (0, pad))
+
+        # slice each window out of the already-loaded tensor (in-memory, no extra I/O)
+        chunks = [
+            sub_audio_t[start - read_start : start - read_start + window_samples]
+            for start in batch_starts
+        ]
+        batch_t = torch.stack(chunks, dim=0)
 
         with torch.inference_mode():
             logits = model(batch_t)
-            logits = logits.view(batch_t.shape[0], -1, model.label_encoder.n_labels)
+            logits = logits.view(batch_t.shape[0], -1, n_labels)
             probs = logits.sigmoid().cpu()
 
         for i, start in enumerate(batch_starts):

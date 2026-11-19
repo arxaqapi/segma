@@ -15,7 +15,8 @@ sample_rate = 16_000
 strict_frames = true
 
 [model]
-hubert_checkpoint = "model/best.ckpt"
+model_checkpoint = "model/best.ckpt"
+model_id = "hubert_large"
 
 [train]
 learning_rate = 1.0e-05

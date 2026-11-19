@@ -4,6 +4,18 @@ version = "0.1.0"
 description = "Minimal audio segmentation toolkit."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Tarek Kunze" }, { name = "Théo Charlot" }, { name = "Marvin Lavechin" }]
+keywords = ["audio", "segmentation", "speech", "deep learning"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
 dependencies = [
     "interlap>=0.2.7",
     "lightning>=2.4.0",
@@ -19,6 +31,9 @@ dependencies = [
     "transformers>=4.47.1",
     "wandb>=0.18.3",
 ]
+
+[project.urls]
+Repository = "https://github.com/arxaqapi/segma"
 
 [build-system]
 requires = ["hatchling"]
